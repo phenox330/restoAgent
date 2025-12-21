@@ -27,8 +27,7 @@ export function SignupForm() {
     const validation = signupSchema.safeParse(data);
 
     if (!validation.success) {
-      // @ts-ignore - Zod error type issue
-      const firstError = validation.error.errors[0];
+      const firstError = validation.error.issues[0];
       setError(firstError?.message || "Erreur de validation");
       setLoading(false);
       return;
