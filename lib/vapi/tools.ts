@@ -237,6 +237,23 @@ export async function handleCreateReservation(args: CreateReservationArgs) {
   );
 
   try {
+    // 0. Validation des champs requis
+    const missingFields: string[] = [];
+    if (!args.customer_name) missingFields.push("nom du client");
+    if (!args.customer_phone) missingFields.push("numéro de téléphone");
+    if (!args.date) missingFields.push("date");
+    if (!args.time) missingFields.push("heure");
+    if (!args.number_of_guests && args.number_of_guests !== 0) missingFields.push("nombre de personnes");
+
+    if (missingFields.length > 0) {
+      console.log("⚠️ Missing required fields:", missingFields);
+      return {
+        success: false,
+        missing_fields: missingFields,
+        message: `Il me manque des informations pour finaliser la réservation : ${missingFields.join(", ")}. Pouvez-vous me les donner ?`,
+      };
+    }
+
     // 1. Vérifier si c'est un grand groupe (> 8 personnes)
     if (args.number_of_guests > LARGE_GROUP_THRESHOLD) {
       console.log(
