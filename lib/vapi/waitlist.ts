@@ -4,11 +4,18 @@ import type { Database } from "@/types/database";
 import type { WaitlistStatus } from "@/types";
 import { getServiceType } from "./availability";
 
-// Client Supabase avec service role pour bypass RLS
-const supabaseAdmin = createClient<Database>(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+// Client Supabase avec service role pour bypass RLS (création paresseuse)
+let supabaseAdminInstance: ReturnType<typeof createClient<Database>> | null = null;
+
+function getSupabaseAdmin() {
+  if (!supabaseAdminInstance) {
+    supabaseAdminInstance = createClient<Database>(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+  }
+  return supabaseAdminInstance;
+}
 
 interface AddToWaitlistParams {
   restaurantId: string;
@@ -43,7 +50,7 @@ export async function addToWaitlist(
     }
 
     // Vérifier si le client existe déjà dans la waitlist pour cette date
-    const { data: existingEntry } = await supabaseAdmin
+    const { data: existingEntry } = await getSupabaseAdmin()
       .from("waitlist")
       .select("id, status")
       .eq("restaurant_id", params.restaurantId)
@@ -63,7 +70,7 @@ export async function addToWaitlist(
     // Vérifier et lier au call s'il existe
     let callUuid: string | null = null;
     if (params.callId) {
-      const { data: callExists } = await supabaseAdmin
+      const { data: callExists } = await getSupabaseAdmin()
         .from("calls")
         .select("id")
         .eq("vapi_call_id", params.callId)
@@ -75,7 +82,7 @@ export async function addToWaitlist(
     }
 
     // Créer l'entrée waitlist
-    const { data: waitlistEntry, error } = await supabaseAdmin
+    const { data: waitlistEntry, error } = await getSupabaseAdmin()
       .from("waitlist")
       .insert({
         restaurant_id: params.restaurantId,
@@ -135,7 +142,7 @@ export async function formatAlternativesMessage(
 ): Promise<string | null> {
   try {
     // Utiliser la fonction SQL find_alternative_slots
-    const { data: alternatives, error } = await supabaseAdmin.rpc(
+    const { data: alternatives, error } = await getSupabaseAdmin().rpc(
       "find_alternative_slots",
       {
         p_restaurant_id: restaurantId,
@@ -203,7 +210,7 @@ export async function convertWaitlistToReservation(
   reservationId: string
 ): Promise<boolean> {
   try {
-    const { error } = await supabaseAdmin
+    const { error } = await getSupabaseAdmin()
       .from("waitlist")
       .update({
         status: "converted",
@@ -226,7 +233,7 @@ export async function getActiveWaitlist(
   date?: string
 ): Promise<any[]> {
   try {
-    let query = supabaseAdmin
+    let query = getSupabaseAdmin()
       .from("waitlist")
       .select("*")
       .eq("restaurant_id", restaurantId)

@@ -3,6 +3,11 @@
  * Usage: npx tsx scripts/create-vapi-assistant.ts
  */
 
+// Charger dotenv AVANT d'utiliser les variables d'environnement
+const { config } = require("dotenv");
+const { resolve } = require("path");
+config({ path: resolve(process.cwd(), ".env.local") });
+
 const VAPI_API_KEY = process.env.VAPI_PRIVATE_KEY;
 const RESTAURANT_ID = "TON_RESTAURANT_ID_ICI"; // À remplacer
 const SERVER_URL = "https://famous-spiders-tan.loca.lt/api/webhooks/vapi";

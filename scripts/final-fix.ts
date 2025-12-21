@@ -2,9 +2,9 @@
  * FIX FINAL - Tout en une fois sans rien écraser
  */
 
-import { config } from "dotenv";
-import { resolve } from "path";
-
+// Charger dotenv AVANT tous les imports ES6
+const { config } = require("dotenv");
+const { resolve } = require("path");
 config({ path: resolve(process.cwd(), ".env.local") });
 
 const VAPI_API_KEY = process.env.VAPI_PRIVATE_KEY;

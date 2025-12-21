@@ -5,11 +5,18 @@ import { addToWaitlist, formatAlternativesMessage } from "./waitlist";
 import { sendConfirmationSMS } from "@/lib/sms/twilio";
 import type { Database } from "@/types/database";
 
-// Client Supabase avec service role pour bypass RLS
-const supabaseAdmin = createClient<Database>(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+// Client Supabase avec service role pour bypass RLS (création paresseuse)
+let supabaseAdminInstance: ReturnType<typeof createClient<Database>> | null = null;
+
+function getSupabaseAdmin() {
+  if (!supabaseAdminInstance) {
+    supabaseAdminInstance = createClient<Database>(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+  }
+  return supabaseAdminInstance;
+}
 
 // Seuil pour groupes nécessitant validation manager
 const LARGE_GROUP_THRESHOLD = 8;
@@ -34,6 +41,7 @@ interface CreateReservationArgs {
   number_of_guests: number;
   special_requests?: string;
   call_id?: string;
+  force_create?: boolean;
 }
 
 interface CancelReservationArgs {
@@ -171,7 +179,7 @@ export async function handleCheckAvailability(args: CheckAvailabilityArgs) {
     JSON.stringify(args, null, 2)
   );
 
-  const result = await checkAvailability(supabaseAdmin, {
+  const result = await checkAvailability(getSupabaseAdmin(), {
     restaurantId: args.restaurant_id,
     date: args.date,
     time: args.time,
@@ -283,29 +291,77 @@ export async function handleCreateReservation(args: CreateReservationArgs) {
     }
 
     // 2. Vérifier si un doublon existe (même téléphone + même date)
-    console.log("📝 Checking for duplicate reservation...");
-    const duplicateCheck = await checkDuplicateReservation(supabaseAdmin, {
-      restaurantId: args.restaurant_id,
-      customerPhone: args.customer_phone,
-      date: args.date,
-    });
+    // Sauf si force_create est activé
+    if (!args.force_create) {
+      console.log("📝 Checking for duplicate reservation...");
+      const duplicateCheck = await checkDuplicateReservation(getSupabaseAdmin(), {
+        restaurantId: args.restaurant_id,
+        customerPhone: args.customer_phone,
+        date: args.date,
+      });
 
-    if (duplicateCheck.hasDuplicate && duplicateCheck.existingReservation) {
-      console.log(
-        "⚠️ Duplicate found:",
-        duplicateCheck.existingReservation.id
-      );
-      return {
-        success: false,
-        has_existing_reservation: true,
-        existing_reservation: duplicateCheck.existingReservation,
-        message: `Vous avez déjà une réservation pour le ${args.date} à ${duplicateCheck.existingReservation.reservation_time} pour ${duplicateCheck.existingReservation.number_of_guests} personnes au nom de ${duplicateCheck.existingReservation.customer_name}. Souhaitez-vous la modifier ou en créer une nouvelle ?`,
-      };
+      if (duplicateCheck.hasDuplicate && duplicateCheck.existingReservation) {
+        console.log(
+          "⚠️ Duplicate found:",
+          duplicateCheck.existingReservation.id
+        );
+        
+        // Formater la date de manière lisible
+        const dateObj = new Date(args.date);
+        const jours = [
+          "dimanche",
+          "lundi",
+          "mardi",
+          "mercredi",
+          "jeudi",
+          "vendredi",
+          "samedi",
+        ];
+        const mois = [
+          "janvier",
+          "février",
+          "mars",
+          "avril",
+          "mai",
+          "juin",
+          "juillet",
+          "août",
+          "septembre",
+          "octobre",
+          "novembre",
+          "décembre",
+        ];
+        const jourNom = jours[dateObj.getDay()];
+        const dateFormatee = `${jourNom} ${dateObj.getDate()} ${mois[dateObj.getMonth()]}`;
+        
+        // Déterminer si c'est demain, aujourd'hui ou une autre date
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const reservationDate = new Date(args.date);
+        reservationDate.setHours(0, 0, 0, 0);
+        const diffDays = Math.round((reservationDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+        
+        let dateReference = dateFormatee;
+        if (diffDays === 0) {
+          dateReference = "aujourd'hui";
+        } else if (diffDays === 1) {
+          dateReference = "demain";
+        }
+        
+        return {
+          success: false,
+          has_existing_reservation: true,
+          existing_reservation: duplicateCheck.existingReservation,
+          message: `Vous avez déjà une table pour ${dateReference} à ${duplicateCheck.existingReservation.reservation_time} pour ${duplicateCheck.existingReservation.number_of_guests} ${duplicateCheck.existingReservation.number_of_guests === 1 ? "personne" : "personnes"}. Souhaitez-vous la modifier ou en ajouter une autre ?`,
+        };
+      }
+    } else {
+      console.log("📝 force_create is true, skipping duplicate check");
     }
 
     // 3. Vérifier la disponibilité
     console.log("📝 Checking availability before creating reservation...");
-    const availability = await checkAvailability(supabaseAdmin, {
+    const availability = await checkAvailability(getSupabaseAdmin(), {
       restaurantId: args.restaurant_id,
       date: args.date,
       time: args.time,
@@ -356,7 +412,7 @@ export async function handleCreateReservation(args: CreateReservationArgs) {
     console.log("📝 Creating reservation in database...");
 
     // Récupérer les infos du restaurant pour le SMS
-    const { data: restaurant } = await supabaseAdmin
+    const { data: restaurant } = await getSupabaseAdmin()
       .from("restaurants")
       .select("name, sms_enabled")
       .eq("id", args.restaurant_id)
@@ -380,7 +436,7 @@ export async function handleCreateReservation(args: CreateReservationArgs) {
 
     // Vérifier si le call existe avant de l'associer
     if (args.call_id) {
-      const { data: callExists } = await supabaseAdmin
+      const { data: callExists } = await getSupabaseAdmin()
         .from("calls")
         .select("id")
         .eq("vapi_call_id", args.call_id)
@@ -396,7 +452,7 @@ export async function handleCreateReservation(args: CreateReservationArgs) {
       }
     }
 
-    const { data: reservation, error } = await supabaseAdmin
+    const { data: reservation, error } = await getSupabaseAdmin()
       .from("reservations")
       .insert(reservationData)
       .select()
@@ -479,7 +535,7 @@ export async function handleCancelReservation(args: CancelReservationArgs) {
   );
 
   try {
-    const { error } = await supabaseAdmin
+    const { error } = await getSupabaseAdmin()
       .from("reservations")
       .update({ status: "cancelled" })
       .eq("id", args.reservation_id);
@@ -517,7 +573,7 @@ export async function handleFindAndCancelReservation(
 
   try {
     // Utiliser la recherche phonétique avec pg_trgm
-    const { data: reservations, error: searchError } = await supabaseAdmin.rpc(
+    const { data: reservations, error: searchError } = await getSupabaseAdmin().rpc(
       "fuzzy_search_reservations",
       {
         p_restaurant_id: args.restaurant_id,
@@ -568,7 +624,7 @@ export async function handleFindAndCancelReservation(
     const reservation = reservations[0];
 
     // Annuler la réservation trouvée
-    const { error: updateError } = await supabaseAdmin
+    const { error: updateError } = await getSupabaseAdmin()
       .from("reservations")
       .update({ status: "cancelled" })
       .eq("id", reservation.id);
@@ -609,7 +665,7 @@ export async function handleFindAndCancelReservation(
 async function fallbackFindAndCancel(args: FindAndCancelReservationArgs) {
   const searchTerms = args.customer_name.trim().split(/\s+/);
 
-  let query = supabaseAdmin
+  let query = getSupabaseAdmin()
     .from("reservations")
     .select("*")
     .eq("restaurant_id", args.restaurant_id)
@@ -639,7 +695,7 @@ async function fallbackFindAndCancel(args: FindAndCancelReservationArgs) {
 
   const reservation = reservations[0];
 
-  const { error: updateError } = await supabaseAdmin
+  const { error: updateError } = await getSupabaseAdmin()
     .from("reservations")
     .update({ status: "cancelled" })
     .eq("id", reservation.id);
@@ -676,7 +732,7 @@ export async function handleFindAndUpdateReservation(
 
   try {
     // Utiliser la recherche phonétique avec pg_trgm
-    const { data: reservations, error: searchError } = await supabaseAdmin.rpc(
+    const { data: reservations, error: searchError } = await getSupabaseAdmin().rpc(
       "fuzzy_search_reservations",
       {
         p_restaurant_id: args.restaurant_id,
@@ -725,7 +781,7 @@ export async function handleFindAndUpdateReservation(
 
     // Vérifier la disponibilité si changement
     if (args.new_date || args.new_time || args.new_number_of_guests) {
-      const availabilityResult = await checkAvailability(supabaseAdmin, {
+      const availabilityResult = await checkAvailability(getSupabaseAdmin(), {
         restaurantId: args.restaurant_id,
         date: newDate,
         time: newTime,
@@ -741,7 +797,7 @@ export async function handleFindAndUpdateReservation(
     }
 
     // Mettre à jour la réservation
-    const { data: updateData, error: updateError } = await supabaseAdmin
+    const { data: updateData, error: updateError } = await getSupabaseAdmin()
       .from("reservations")
       .update({
         reservation_date: newDate,
@@ -786,7 +842,7 @@ export async function handleFindAndUpdateReservation(
 async function fallbackFindAndUpdate(args: FindAndUpdateReservationArgs) {
   const searchTerms = args.customer_name.trim().split(/\s+/);
 
-  let query = supabaseAdmin
+  let query = getSupabaseAdmin()
     .from("reservations")
     .select("*")
     .eq("restaurant_id", args.restaurant_id)
@@ -819,7 +875,7 @@ async function fallbackFindAndUpdate(args: FindAndUpdateReservationArgs) {
   const newGuests = args.new_number_of_guests || reservation.number_of_guests;
 
   if (args.new_date || args.new_time || args.new_number_of_guests) {
-    const availabilityResult = await checkAvailability(supabaseAdmin, {
+    const availabilityResult = await checkAvailability(getSupabaseAdmin(), {
       restaurantId: args.restaurant_id,
       date: newDate,
       time: newTime,
@@ -834,7 +890,7 @@ async function fallbackFindAndUpdate(args: FindAndUpdateReservationArgs) {
     }
   }
 
-  const { error: updateError } = await supabaseAdmin
+  const { error: updateError } = await getSupabaseAdmin()
     .from("reservations")
     .update({
       reservation_date: newDate,

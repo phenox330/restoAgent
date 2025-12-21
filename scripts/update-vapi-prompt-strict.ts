@@ -3,7 +3,8 @@
  * pour éviter les hallucinations sur les résultats des tools
  */
 
-import * as dotenv from "dotenv";
+// Charger dotenv AVANT tous les imports ES6
+const dotenv = require("dotenv");
 dotenv.config({ path: ".env.local" });
 
 const VAPI_API_KEY = process.env.VAPI_PRIVATE_KEY;
@@ -103,6 +104,15 @@ Puis utilise find_and_cancel_reservation avec le nom
 "Bien sûr ! La réservation est à quel nom ?"
 Puis utilise find_and_update_reservation
 
+**Gestion des réservations existantes (DOUBLONS):**
+Quand create_reservation retourne `has_existing_reservation: true` :
+- Le message de l'outil contient déjà la question : "Souhaitez-vous la modifier ou en ajouter une autre ?"
+- Tu DOIS lire ce message et le transmettre au client de manière naturelle
+- ATTENDS la réponse du client :
+  * Si le client veut **modifier** sa réservation existante → Utilise `find_and_update_reservation` avec les nouvelles informations (date, heure, nombre de personnes, etc.)
+  * Si le client veut **ajouter** une autre réservation (garder l'ancienne ET créer une nouvelle) → Re-appelle `create_reservation` avec les mêmes paramètres mais en ajoutant `force_create: true` pour forcer la création même si un doublon existe
+- Ne JAMAIS créer une deuxième réservation sans confirmation explicite du client
+
 Rappel: Sois humain(e), pas un robot. MAIS respecte TOUJOURS les résultats des outils.`;
 
 async function updateVapiPrompt() {
@@ -149,6 +159,8 @@ async function updateVapiPrompt() {
   console.log("📋 Changements appliqués:");
   console.log("  - Ajout de la RÈGLE ABSOLUE sur les résultats des outils");
   console.log("  - Instructions explicites pour gérer 'fermé' et 'complet'");
+  console.log("  - Instructions pour gérer les réservations existantes (doublons)");
+  console.log("  - Guide pour utiliser find_and_update_reservation ou force_create");
   console.log("  - Température réduite de 0.85 à 0.7 (moins d'hallucinations)");
   console.log("  - Max tokens augmenté de 250 à 300");
   console.log("");

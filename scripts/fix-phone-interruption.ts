@@ -1,6 +1,11 @@
 /**
- * Script pour mettre à jour l'assistant Vapi avec une configuration NATURELLE
- * Optimisé pour des conversations fluides et humaines
+ * Script pour corriger le problème d'interruption lors de la dictée des numéros de téléphone
+ * 
+ * Changements:
+ * 1. Augmente l'endpointing de 200ms à 500ms
+ * 2. Ajoute des instructions dans le prompt pour gérer les numéros de téléphone
+ * 
+ * Usage: npx tsx scripts/fix-phone-interruption.ts
  */
 
 // Charger dotenv AVANT tous les imports ES6
@@ -9,70 +14,9 @@ const { resolve } = require("path");
 config({ path: resolve(process.cwd(), ".env.local") });
 
 const VAPI_API_KEY = process.env.VAPI_PRIVATE_KEY;
-const ASSISTANT_ID = process.argv[2];
-const SERVER_URL = process.argv[3];
-const RESTAURANT_ID = process.argv[4];
+const ASSISTANT_ID = "b31a622f-68c6-4eaf-a6ce-58a14ddcad23";
 
-async function updateVapiAssistant() {
-  if (!VAPI_API_KEY) {
-    console.error("❌ VAPI_PRIVATE_KEY manquant");
-    process.exit(1);
-  }
-
-  if (!ASSISTANT_ID || !SERVER_URL || !RESTAURANT_ID) {
-    console.error("❌ Usage: npx tsx scripts/update-vapi-assistant-natural.ts <assistant-id> <server-url> <restaurant-id>");
-    process.exit(1);
-  }
-
-  console.log(`🔄 Mise à jour de l'assistant ${ASSISTANT_ID} avec configuration NATURELLE...`);
-
-  const response = await fetch(`https://api.vapi.ai/assistant/${ASSISTANT_ID}`, {
-    method: "PATCH",
-    headers: {
-      Authorization: `Bearer ${VAPI_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      serverUrl: SERVER_URL,
-
-      metadata: {
-        restaurant_id: RESTAURANT_ID,
-      },
-
-      // Message d'accueil personnalisé
-      firstMessage: "Bonjour ! Restaurant épicurie, je vous écoute.",
-
-      // Voix OpenAI (requis pour modèle realtime)
-      voice: {
-        provider: "openai",
-        voiceId: "alloy", // Voix féminine naturelle
-        // Alternatives: echo, fable, onyx, nova, shimmer
-      },
-
-      // Transcriber optimisé pour français
-      transcriber: {
-        provider: "deepgram",
-        model: "nova-2",
-        language: "fr",
-        smartFormat: true,
-        endpointing: 200, // ms - détection rapide de fin de phrase
-        keywords: ["épicurie", "réservation"], // Améliore reconnaissance mots-clés
-      },
-
-      // Note: audioSettings (backgroundSound) n'est pas encore supporté par l'API Vapi
-      // pour les assistants. Cette fonctionnalité pourrait être ajoutée dans le futur.
-
-      // Modèle realtime pour appels vocaux
-      model: {
-        provider: "openai",
-        model: "gpt-4o-realtime-preview-2024-12-17",
-        temperature: 0.85, // Plus haut = plus de variété dans les réponses
-        maxTokens: 250, // Réponses courtes et concises
-
-        messages: [
-          {
-            role: "system",
-            content: `Tu es l'hôte/hôtesse du restaurant épicurie. Tu es chaleureux(se), professionnel(le) et tu parles de manière naturelle, comme dans une vraie conversation téléphonique.
+const SYSTEM_PROMPT = `Tu es l'hôte/hôtesse du restaurant épicurie. Tu es chaleureux(se), professionnel(le) et tu parles de manière naturelle, comme dans une vraie conversation téléphonique.
 
 # DATE ET HEURE ACTUELLES
 Nous sommes le : {{ "now" | date: "%b %d, %Y, %I:%M %p", "Europe/Paris" }}
@@ -97,6 +41,14 @@ Ton objectif principal est de prendre des réservations par téléphone. Tu dois
 - Le nombre de personnes
 - Le numéro de téléphone
 
+# NUMÉROS DE TÉLÉPHONE - RÈGLES IMPORTANTES
+- Demande le numéro de téléphone SÉPARÉMENT (pas en même temps que le nom ou d'autres infos)
+- Dis quelque chose comme : "Et votre numéro de téléphone, s'il vous plaît ?"
+- ATTENDS que le client ait fini de dicter TOUT le numéro avant de répondre
+- Les clients dictent souvent les numéros avec des pauses - c'est NORMAL, laisse-les finir
+- Si le numéro semble incomplet (moins de 10 chiffres), demande poliment : "Excusez-moi, je n'ai pas bien entendu la fin. Pouvez-vous me redonner votre numéro ?"
+- NE COUPE JAMAIS la parole quand quelqu'un dicte un numéro
+
 # FLOW CONVERSATIONNEL
 1. **Accueil naturel** - Le client t'appelle, tu accueilles chaleureusement
 
@@ -108,8 +60,10 @@ Ton objectif principal est de prendre des réservations par téléphone. Tu dois
    - Si pas dispo: "Malheureusement nous sommes complets à cette heure... Je peux vous proposer [autre créneau] ?"
 
 4. **Finalisation** - Quand dispo confirmée:
-   - Demande le téléphone (si pas déjà donné)
-   - Confirme tout naturellement: "Très bien, je vous confirme votre réservation pour [X] personnes le [date] à [heure] au nom de [nom]. On vous attend !"
+   - Demande le nom si pas déjà donné
+   - Demande le téléphone SÉPARÉMENT : "Et votre numéro de téléphone ?"
+   - ATTENDS la réponse complète
+   - Confirme : "Très bien, je vous confirme votre réservation pour [X] personnes le [date] à [heure] au nom de [nom]. On vous attend !"
    - Utilise create_reservation
 
 5. **Demandes spéciales** - Si le client mentionne une allergie, un anniversaire, etc., note-le dans special_requests
@@ -143,6 +97,16 @@ Assistant: "Bonjour ! Avec plaisir. C'est pour combien de personnes et quel jour
 Client: "4 personnes, demain soir"
 Assistant: "Parfait ! Et vous préférez quelle heure ?"
 
+❌ MAUVAIS (coupe la parole):
+Assistant: "Et votre numéro de téléphone ?"
+Client: "C'est le 06 12..."
+Assistant: "Merci, je note."  ← TROP TÔT !
+
+✅ BON (attend la fin):
+Assistant: "Et votre numéro de téléphone ?"
+Client: "C'est le 06 12 34 56 78"
+Assistant: "Parfait, c'est noté !"
+
 # CAS PARTICULIERS
 
 **Si le client demande des infos sur le restaurant:**
@@ -161,10 +125,48 @@ Puis utilise find_and_update_reservation avec le nom + les nouvelles information
 **Si tout est complet:**
 "Je suis désolé(e), nous sommes complets ce jour-là. Puis-je vous proposer [jour d'avant/après] à la même heure ? Ou un autre créneau le même jour ?"
 
-Rappel: Sois humain(e), pas un robot. Les gens appellent un restaurant, pas un centre d'appels.`,
+Rappel: Sois humain(e), pas un robot. Les gens appellent un restaurant, pas un centre d'appels.`;
+
+async function fixPhoneInterruption() {
+  if (!VAPI_API_KEY) {
+    console.error("❌ VAPI_PRIVATE_KEY manquant dans .env.local");
+    process.exit(1);
+  }
+
+  console.log(`🔧 Correction du problème d'interruption téléphone...`);
+  console.log(`   Assistant: ${ASSISTANT_ID}`);
+  console.log("");
+
+  const response = await fetch(`https://api.vapi.ai/assistant/${ASSISTANT_ID}`, {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bearer ${VAPI_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      // Transcriber avec endpointing augmenté
+      transcriber: {
+        provider: "deepgram",
+        model: "nova-2",
+        language: "fr",
+        smartFormat: true,
+        endpointing: 500, // Augmenté de 200ms à 500ms
+        keywords: ["épicurie", "réservation"],
+      },
+
+      // Prompt mis à jour avec instructions pour les numéros de téléphone
+      model: {
+        provider: "openai",
+        model: "gpt-4o-realtime-preview-2024-12-17",
+        temperature: 0.85,
+        maxTokens: 250,
+        messages: [
+          {
+            role: "system",
+            content: SYSTEM_PROMPT,
           },
         ],
-
+        // IMPORTANT: Inclure toutes les fonctions
         functions: [
           {
             name: "check_availability",
@@ -268,6 +270,10 @@ Rappel: Sois humain(e), pas un robot. Les gens appellent un restaurant, pas un c
                   type: "string",
                   description: "Nom du client UNIQUEMENT (suffit pour trouver la réservation)",
                 },
+                customer_phone: {
+                  type: "string",
+                  description: "Numéro de téléphone du client (optionnel, aide à affiner la recherche)",
+                },
                 new_date: {
                   type: "string",
                   description: "Nouvelle date au format YYYY-MM-DD (optionnel, ne fournir QUE si le client veut changer la date)",
@@ -297,20 +303,19 @@ Rappel: Sois humain(e), pas un robot. Les gens appellent un restaurant, pas un c
 
   const assistant = await response.json();
 
-  console.log("✅ Assistant mis à jour avec configuration NATURELLE !");
+  console.log("✅ Correction appliquée avec succès !");
   console.log("");
-  console.log("📋 Améliorations appliquées:");
-  console.log("  - Voix OpenAI (alloy) - Compatible realtime");
-  console.log("  - Modèle GPT-4o Realtime - Latence ultra-faible");
-  console.log("  - Temperature 0.85 - Plus de variété");
-  console.log("  - Transcriber Deepgram Nova-2 - Meilleure reconnaissance français");
-  console.log("  - Prompt conversationnel - Fini les checklists !");
-  console.log("  - 5 fonctions: réservation, vérification, annulation, modification");
+  console.log("📋 Changements effectués:");
+  console.log("  1. Endpointing: 200ms → 500ms (plus de temps avant de considérer la fin de parole)");
+  console.log("  2. Prompt: Instructions ajoutées pour gérer les numéros de téléphone");
+  console.log("     - Demander le téléphone séparément");
+  console.log("     - Attendre que le client ait fini de dicter");
+  console.log("     - Ne jamais couper la parole pendant la dictée");
   console.log("");
-  console.log("🔗 Dashboard:");
-  console.log(`https://dashboard.vapi.ai/assistants/${assistant.id}`);
+  console.log("🔗 Dashboard Vapi:");
+  console.log(`  https://dashboard.vapi.ai/assistants/${assistant.id}`);
   console.log("");
-  console.log("💡 Testez maintenant - la conversation devrait être BEAUCOUP plus naturelle !");
+  console.log("🧪 Testez maintenant - l'agent ne devrait plus couper la parole !");
 }
 
-updateVapiAssistant().catch(console.error);
+fixPhoneInterruption().catch(console.error);

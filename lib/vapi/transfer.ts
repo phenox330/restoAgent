@@ -7,11 +7,18 @@
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
 
-// Client Supabase avec service role
-const supabaseAdmin = createClient<Database>(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+// Client Supabase avec service role (création paresseuse)
+let supabaseAdminInstance: ReturnType<typeof createClient<Database>> | null = null;
+
+function getSupabaseAdmin() {
+  if (!supabaseAdminInstance) {
+    supabaseAdminInstance = createClient<Database>(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+  }
+  return supabaseAdminInstance;
+}
 
 // Seuils pour déclenchement du transfert
 const TRANSFER_THRESHOLDS = {
@@ -52,7 +59,7 @@ export async function evaluateTransferCondition(
   context: TransferContext
 ): Promise<TransferResult> {
   // Récupérer les infos du restaurant pour le numéro de fallback
-  const { data: restaurant } = await supabaseAdmin
+  const { data: restaurant } = await getSupabaseAdmin()
     .from("restaurants")
     .select("fallback_phone, phone, name")
     .eq("id", context.restaurantId)
@@ -162,7 +169,7 @@ export async function initiateTransfer(
   // Si on a un call_id, mettre à jour les métadonnées de l'appel
   if (context.callId) {
     try {
-      await supabaseAdmin
+      await getSupabaseAdmin()
         .from("calls")
         .update({
           vapi_metadata: {

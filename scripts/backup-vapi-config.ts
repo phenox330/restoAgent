@@ -2,11 +2,13 @@
  * Sauvegarde la configuration Vapi actuelle (qui fonctionne !)
  */
 
-import { config } from "dotenv";
-import { resolve } from "path";
-import { writeFileSync } from "fs";
-
+// Charger dotenv AVANT tous les imports ES6
+const { config } = require("dotenv");
+const { resolve } = require("path");
 config({ path: resolve(process.cwd(), ".env.local") });
+
+// Maintenant les imports ES6 peuvent utiliser les variables d'environnement
+import { writeFileSync } from "fs";
 
 const VAPI_API_KEY = process.env.VAPI_PRIVATE_KEY;
 const ASSISTANT_ID = "b31a622f-68c6-4eaf-a6ce-58a14ddcad23";

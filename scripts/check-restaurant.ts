@@ -3,12 +3,13 @@
  * Usage: npx tsx scripts/check-restaurant.ts
  */
 
-import { config } from "dotenv";
-import { resolve } from "path";
-import { createClient } from "@supabase/supabase-js";
-
-// Charger les variables d'environnement depuis .env.local
+// Charger dotenv AVANT tous les imports ES6
+const { config } = require("dotenv");
+const { resolve } = require("path");
 config({ path: resolve(process.cwd(), ".env.local") });
+
+// Maintenant les imports ES6 peuvent utiliser les variables d'environnement
+import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,

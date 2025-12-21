@@ -3,7 +3,8 @@
  * Ce modèle est plus fiable pour les tool calls que gpt-4o-realtime
  */
 
-import * as dotenv from "dotenv";
+// Charger dotenv AVANT tous les imports ES6
+const dotenv = require("dotenv");
 dotenv.config({ path: ".env.local" });
 
 const VAPI_API_KEY = process.env.VAPI_PRIVATE_KEY;

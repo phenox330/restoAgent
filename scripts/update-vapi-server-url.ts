@@ -3,6 +3,11 @@
  * Usage: npx tsx scripts/update-vapi-server-url.ts <assistant-id> <new-url>
  */
 
+// Charger dotenv AVANT d'utiliser les variables d'environnement
+const { config } = require("dotenv");
+const { resolve } = require("path");
+config({ path: resolve(process.cwd(), ".env.local") });
+
 const VAPI_API_KEY = process.env.VAPI_PRIVATE_KEY;
 
 async function updateVapiServerUrl(assistantId: string, serverUrl: string) {

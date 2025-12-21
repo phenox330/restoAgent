@@ -5,7 +5,8 @@
  * - Ne redemande pas les infos déjà fournies
  */
 
-import * as dotenv from "dotenv";
+// Charger dotenv AVANT tous les imports ES6
+const dotenv = require("dotenv");
 dotenv.config({ path: ".env.local" });
 
 const VAPI_API_KEY = process.env.VAPI_PRIVATE_KEY;
