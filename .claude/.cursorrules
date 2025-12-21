@@ -1,0 +1,101 @@
+You are an expert senior developer working on RestoAgent, a SaaS for restaurant reservation management via AI voice agent.
+
+## Tech Stack
+- Next.js 14 (App Router)
+- TypeScript (strict mode, no any)
+- Tailwind CSS + Shadcn/ui
+- Supabase (Auth + PostgreSQL + Realtime)
+- Vapi.ai (voice agent webhooks)
+- TanStack Query (data fetching)
+- Zod (validation)
+- date-fns (dates)
+
+## Code Style
+
+### TypeScript
+- Strict mode, explicit types, no `any`
+- Use `interface` for objects, `type` for unions
+- Zod schemas for runtime validation
+- Types in `src/types/`
+
+### React / Next.js
+- Server Components by default
+- Client Components ("use client") only for interactivity (hooks, events)
+- Use API Routes for mutations, not Server Actions
+- TanStack Query for client-side data fetching
+
+### File Naming
+- Files: kebab-case (reservation-card.tsx)
+- Components: PascalCase (ReservationCard)
+- Hooks: camelCase with use prefix (useReservations)
+
+### Imports Order
+1. React/Next imports
+2. External libraries
+3. Internal components (@/components)
+4. Internal lib/utils (@/lib)
+5. Types (import type)
+
+## Supabase Rules
+- Browser client: `@/lib/supabase/client` (components)
+- Server client: `@/lib/supabase/server` (API routes, Server Components)
+- Service role: only in webhooks for bypassing RLS
+- Always handle errors from Supabase queries
+- Use `.returns<Type[]>()` for type safety
+
+## UI Rules
+- Mobile-first responsive (sm:, md:, lg:)
+- Use `cn()` for conditional classes
+- Use Shadcn CSS variables (bg-primary, text-muted-foreground)
+- No hardcoded colors
+- Always add loading states (Skeleton or Spinner)
+- Always add error states (Toast or error page)
+- Empty states with suggested action
+
+## API Routes Pattern
+```typescript
+import { NextResponse } from 'next/server'
+import { z } from 'zod'
+import { createClient } from '@/lib/supabase/server'
+
+const schema = z.object({ /* ... */ })
+
+export async function POST(request: Request) {
+  try {
+    const body = await request.json()
+    const validated = schema.parse(body)
+    const supabase = await createClient()
+    // ... logic
+    return NextResponse.json({ data })
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return NextResponse.json({ error: 'Validation error', details: error.errors }, { status: 400 })
+    }
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}
+```
+
+## Database Schema
+- restaurants: id, name, phone, address, opening_hours (JSONB), max_capacity, owner_id
+- reservations: id, restaurant_id, customer_name, customer_phone, date, time, party_size, status, call_id
+- calls: id, restaurant_id, vapi_call_id, started_at, ended_at, duration, intent, outcome, recording_url, transcript
+
+## Reservation Statuses
+pending → confirmed → completed | cancelled | no_show
+
+## Don'ts
+- No `any` types
+- No console.log in production code
+- No fetch in useEffect (use TanStack Query)
+- No secrets in client code (only NEXT_PUBLIC_*)
+- No modifying Shadcn ui/ components directly
+- No inline styles
+- No ignoring Supabase errors
+
+## Response Format
+- Write clean, production-ready code
+- Include TypeScript types
+- Add brief comments for complex logic only
+- Suggest file paths for new code
+- Consider mobile responsiveness
