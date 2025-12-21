@@ -252,14 +252,24 @@ export async function handleFindAndCancelReservation(args: FindAndCancelReservat
 
   try {
     // Rechercher la réservation active (non annulée, non complétée) par nom
+    // Stratégie: chercher par mots individuels pour gérer les erreurs de transcription vocale
+    const searchTerms = args.customer_name.trim().split(/\s+/);
+    console.log("🔍 Search terms:", searchTerms);
+
     let query = supabaseAdmin
       .from("reservations")
       .select("*")
       .eq("restaurant_id", args.restaurant_id)
-      .ilike("customer_name", `%${args.customer_name}%`)
       .in("status", ["pending", "confirmed"])
       .order("reservation_date", { ascending: true })
       .order("reservation_time", { ascending: true });
+
+    // Chercher si le nom contient AU MOINS UN des mots (nom de famille généralement)
+    // Utiliser OR logic avec ilike sur chaque terme
+    if (searchTerms.length > 0) {
+      const orConditions = searchTerms.map(term => `customer_name.ilike.%${term}%`).join(',');
+      query = query.or(orConditions);
+    }
 
     // Si le téléphone est fourni, l'utiliser pour affiner la recherche
     if (args.customer_phone) {
@@ -331,14 +341,24 @@ export async function handleFindAndUpdateReservation(args: FindAndUpdateReservat
 
   try {
     // Rechercher la réservation active par nom
+    // Stratégie: chercher par mots individuels pour gérer les erreurs de transcription vocale
+    const searchTerms = args.customer_name.trim().split(/\s+/);
+    console.log("✏️ Search terms:", searchTerms);
+
     let query = supabaseAdmin
       .from("reservations")
       .select("*")
       .eq("restaurant_id", args.restaurant_id)
-      .ilike("customer_name", `%${args.customer_name}%`)
       .in("status", ["pending", "confirmed"])
       .order("reservation_date", { ascending: true })
       .order("reservation_time", { ascending: true });
+
+    // Chercher si le nom contient AU MOINS UN des mots (nom de famille généralement)
+    // Utiliser OR logic avec ilike sur chaque terme
+    if (searchTerms.length > 0) {
+      const orConditions = searchTerms.map(term => `customer_name.ilike.%${term}%`).join(',');
+      query = query.or(orConditions);
+    }
 
     if (args.customer_phone) {
       query = query.eq("customer_phone", args.customer_phone);
