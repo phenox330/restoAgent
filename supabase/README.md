@@ -2,6 +2,33 @@
 
 Ce dossier contient les migrations SQL pour créer le schéma de base de données RestoAgent.
 
+## 🔄 Reset complet de la base de données
+
+**⚠️ ATTENTION : Supprime TOUTES les données existantes !**
+
+Si tu veux repartir de zéro avec une base de données propre :
+
+### Option 1 : Via l'interface Supabase (Recommandé)
+
+1. Va sur https://supabase.com/dashboard
+2. Sélectionne ton projet
+3. Dans le menu latéral, clique sur **SQL Editor**
+4. Clique sur **New query**
+5. Copie le contenu du fichier `reset-database.sql`
+6. Colle-le dans l'éditeur
+7. Clique sur **Run** (ou Cmd/Ctrl + Enter)
+8. Ensuite, exécute les migrations normalement (voir ci-dessous)
+
+### Option 2 : Via Supabase CLI
+
+```bash
+# Exécuter le script de reset
+npx supabase db execute --file supabase/reset-database.sql
+
+# Puis appliquer les migrations
+npx supabase db push
+```
+
 ## Comment exécuter les migrations
 
 ### Option 1 : Via l'interface Supabase (Recommandé pour débuter)
