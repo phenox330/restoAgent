@@ -5,10 +5,11 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { createRestaurant, updateRestaurant } from "@/lib/restaurant/actions";
 import { OpeningHoursForm } from "./opening-hours-form";
+import { Phone, MessageSquare, Users } from "lucide-react";
 import type { Restaurant } from "@/types";
 import type { OpeningHours } from "@/lib/restaurant/schemas";
 
@@ -23,6 +24,7 @@ export function RestaurantForm({ restaurant }: RestaurantFormProps) {
   const [openingHours, setOpeningHours] = useState<OpeningHours>(
     (restaurant?.opening_hours as OpeningHours) || {}
   );
+  const [smsEnabled, setSmsEnabled] = useState(restaurant?.sms_enabled ?? true);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -37,6 +39,10 @@ export function RestaurantForm({ restaurant }: RestaurantFormProps) {
       phone: formData.get("phone") as string,
       address: formData.get("address") as string,
       max_capacity: parseInt(formData.get("max_capacity") as string),
+      max_capacity_lunch: parseInt(formData.get("max_capacity_lunch") as string),
+      max_capacity_dinner: parseInt(formData.get("max_capacity_dinner") as string),
+      fallback_phone: formData.get("fallback_phone") as string || null,
+      sms_enabled: smsEnabled,
       default_reservation_duration: parseInt(formData.get("default_reservation_duration") as string),
       opening_hours: openingHours,
       closed_dates: [],
@@ -84,7 +90,7 @@ export function RestaurantForm({ restaurant }: RestaurantFormProps) {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="phone">Téléphone *</Label>
+              <Label htmlFor="phone">Téléphone principal *</Label>
               <Input
                 id="phone"
                 name="phone"
@@ -122,18 +128,21 @@ export function RestaurantForm({ restaurant }: RestaurantFormProps) {
         </CardContent>
       </Card>
 
-      {/* Paramètres */}
+      {/* Capacité par service */}
       <Card>
         <CardHeader>
-          <CardTitle>Paramètres</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <Users className="h-5 w-5" />
+            Capacité par service
+          </CardTitle>
           <CardDescription>
-            Configuration de la capacité et des réservations
+            Définissez la capacité maximale pour chaque service (midi et soir)
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-4 md:grid-cols-3">
             <div className="space-y-2">
-              <Label htmlFor="max_capacity">Capacité maximale *</Label>
+              <Label htmlFor="max_capacity">Capacité totale *</Label>
               <Input
                 id="max_capacity"
                 name="max_capacity"
@@ -145,28 +154,125 @@ export function RestaurantForm({ restaurant }: RestaurantFormProps) {
                 disabled={loading}
               />
               <p className="text-xs text-muted-foreground">
-                Nombre maximum de couverts par service
+                Capacité globale du restaurant
               </p>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="default_reservation_duration">Durée par défaut (min) *</Label>
+              <Label htmlFor="max_capacity_lunch">Capacité midi *</Label>
               <Input
-                id="default_reservation_duration"
-                name="default_reservation_duration"
+                id="max_capacity_lunch"
+                name="max_capacity_lunch"
                 type="number"
-                min="15"
-                max="480"
-                step="15"
-                defaultValue={restaurant?.default_reservation_duration || 90}
+                min="1"
+                max="1000"
+                defaultValue={restaurant?.max_capacity_lunch || 25}
                 required
                 disabled={loading}
               />
               <p className="text-xs text-muted-foreground">
-                Durée par défaut d&apos;une réservation
+                Couverts max pour le service du midi
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="max_capacity_dinner">Capacité soir *</Label>
+              <Input
+                id="max_capacity_dinner"
+                name="max_capacity_dinner"
+                type="number"
+                min="1"
+                max="1000"
+                defaultValue={restaurant?.max_capacity_dinner || 50}
+                required
+                disabled={loading}
+              />
+              <p className="text-xs text-muted-foreground">
+                Couverts max pour le service du soir
               </p>
             </div>
           </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="default_reservation_duration">Durée réservation (min) *</Label>
+            <Input
+              id="default_reservation_duration"
+              name="default_reservation_duration"
+              type="number"
+              min="15"
+              max="480"
+              step="15"
+              defaultValue={restaurant?.default_reservation_duration || 90}
+              required
+              disabled={loading}
+              className="max-w-[200px]"
+            />
+            <p className="text-xs text-muted-foreground">
+              Durée par défaut d&apos;une réservation en minutes
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Transfert et notifications */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Phone className="h-5 w-5" />
+            Transfert et notifications
+          </CardTitle>
+          <CardDescription>
+            Configuration du transfert vers humain et des SMS de confirmation
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="space-y-2">
+            <Label htmlFor="fallback_phone">Numéro de transfert</Label>
+            <Input
+              id="fallback_phone"
+              name="fallback_phone"
+              type="tel"
+              defaultValue={restaurant?.fallback_phone || restaurant?.phone || ""}
+              placeholder="+33 1 23 45 67 89"
+              disabled={loading}
+            />
+            <p className="text-xs text-muted-foreground">
+              Numéro vers lequel transférer l&apos;appel en cas de besoin (groupes &gt; 8 personnes, incompréhension, demande explicite).
+              Si vide, le téléphone principal sera utilisé.
+            </p>
+          </div>
+
+          <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+            <div className="flex items-center gap-3">
+              <MessageSquare className="h-5 w-5 text-gray-500" />
+              <div>
+                <Label htmlFor="sms_enabled" className="cursor-pointer">
+                  SMS de confirmation
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Envoyer automatiquement un SMS de confirmation avec lien d&apos;annulation
+                </p>
+              </div>
+            </div>
+            <Switch
+              id="sms_enabled"
+              checked={smsEnabled}
+              onCheckedChange={setSmsEnabled}
+              disabled={loading}
+            />
+          </div>
+
+          {smsEnabled && (
+            <div className="text-sm text-muted-foreground p-3 bg-blue-50 rounded-lg">
+              <p className="font-medium text-blue-800 mb-1">Configuration Twilio requise</p>
+              <p className="text-blue-700">
+                Pour activer les SMS, configurez les variables d&apos;environnement:
+                <code className="block mt-1 text-xs bg-blue-100 p-1 rounded">
+                  TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER
+                </code>
+              </p>
+            </div>
+          )}
         </CardContent>
       </Card>
 

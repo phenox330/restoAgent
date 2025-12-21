@@ -1,6 +1,8 @@
 // @ts-nocheck
 import { createClient } from "@supabase/supabase-js";
-import { checkAvailability } from "./availability";
+import { checkAvailability, checkDuplicateReservation, getServiceType } from "./availability";
+import { addToWaitlist, formatAlternativesMessage } from "./waitlist";
+import { sendConfirmationSMS } from "@/lib/sms/twilio";
 import type { Database } from "@/types/database";
 
 // Client Supabase avec service role pour bypass RLS
@@ -8,6 +10,12 @@ const supabaseAdmin = createClient<Database>(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
+
+// Seuil pour groupes nécessitant validation manager
+const LARGE_GROUP_THRESHOLD = 8;
+
+// Seuil de confiance pour validation manuelle
+const CONFIDENCE_THRESHOLD = 0.7;
 
 interface CheckAvailabilityArgs {
   restaurant_id: string;
@@ -47,6 +55,52 @@ interface FindAndUpdateReservationArgs {
   new_number_of_guests?: number;
 }
 
+/**
+ * Calcule le score de confiance basé sur la qualité des données
+ */
+function calculateConfidenceScore(args: CreateReservationArgs): number {
+  let score = 0;
+
+  // Vérifier que tous les champs requis sont remplis (+0.3)
+  const requiredFields = [
+    args.customer_name,
+    args.customer_phone,
+    args.date,
+    args.time,
+    args.number_of_guests,
+  ];
+  const filledFields = requiredFields.filter(
+    (f) => f !== undefined && f !== null && f !== ""
+  );
+  score += (filledFields.length / requiredFields.length) * 0.3;
+
+  // Format téléphone valide (+0.2)
+  const phoneRegex = /^[0-9+\-\s()]{8,}$/;
+  if (phoneRegex.test(args.customer_phone)) {
+    score += 0.2;
+  }
+
+  // Nom client valide (au moins 2 caractères) (+0.15)
+  if (args.customer_name && args.customer_name.trim().length >= 2) {
+    score += 0.15;
+  }
+
+  // Date dans le futur (+0.15)
+  const reservationDate = new Date(args.date);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  if (reservationDate >= today) {
+    score += 0.15;
+  }
+
+  // Nombre de couverts raisonnable (1-20) (+0.2)
+  if (args.number_of_guests >= 1 && args.number_of_guests <= 20) {
+    score += 0.2;
+  }
+
+  return Math.min(score, 1);
+}
+
 // Tool 0: Obtenir la date actuelle
 export async function handleGetCurrentDate() {
   console.log("📅 get_current_date called");
@@ -61,27 +115,48 @@ export async function handleGetCurrentDate() {
   nextWeek.setDate(nextWeek.getDate() + 7);
 
   // Jours de la semaine en français
-  const jours = ["dimanche", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi"];
-  const mois = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
+  const jours = [
+    "dimanche",
+    "lundi",
+    "mardi",
+    "mercredi",
+    "jeudi",
+    "vendredi",
+    "samedi",
+  ];
+  const mois = [
+    "janvier",
+    "février",
+    "mars",
+    "avril",
+    "mai",
+    "juin",
+    "juillet",
+    "août",
+    "septembre",
+    "octobre",
+    "novembre",
+    "décembre",
+  ];
 
   const result = {
     success: true,
     message: `Nous sommes le ${jours[now.getDay()]} ${now.getDate()} ${mois[now.getMonth()]} ${now.getFullYear()}`,
-    current_date: now.toISOString().split('T')[0], // Format YYYY-MM-DD
-    current_time: now.toTimeString().split(' ')[0].substring(0, 5), // Format HH:mm
+    current_date: now.toISOString().split("T")[0], // Format YYYY-MM-DD
+    current_time: now.toTimeString().split(" ")[0].substring(0, 5), // Format HH:mm
     day_of_week: jours[now.getDay()],
-    tomorrow_date: tomorrow.toISOString().split('T')[0],
+    tomorrow_date: tomorrow.toISOString().split("T")[0],
     tomorrow_day: jours[tomorrow.getDay()],
-    next_week_date: nextWeek.toISOString().split('T')[0],
+    next_week_date: nextWeek.toISOString().split("T")[0],
     year: now.getFullYear(),
-    full_datetime: now.toLocaleString('fr-FR', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    })
+    full_datetime: now.toLocaleString("fr-FR", {
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    }),
   };
 
   console.log("📅 get_current_date result:", JSON.stringify(result, null, 2));
@@ -91,7 +166,10 @@ export async function handleGetCurrentDate() {
 
 // Tool 1: Vérifier les disponibilités
 export async function handleCheckAvailability(args: CheckAvailabilityArgs) {
-  console.log("🔍 check_availability called with:", JSON.stringify(args, null, 2));
+  console.log(
+    "🔍 check_availability called with:",
+    JSON.stringify(args, null, 2)
+  );
 
   const result = await checkAvailability(supabaseAdmin, {
     restaurantId: args.restaurant_id,
@@ -105,29 +183,110 @@ export async function handleCheckAvailability(args: CheckAvailabilityArgs) {
   if (result.available) {
     // Format de date en français
     const dateObj = new Date(args.date);
-    const jours = ["dimanche", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi"];
+    const jours = [
+      "dimanche",
+      "lundi",
+      "mardi",
+      "mercredi",
+      "jeudi",
+      "vendredi",
+      "samedi",
+    ];
     const jourNom = jours[dateObj.getDay()];
+    const serviceLabel =
+      result.serviceType === "lunch" ? "pour le déjeuner" : "pour le dîner";
 
     return {
       success: true,
-      message: `Oui, nous avons de la disponibilité pour ${args.number_of_guests} ${args.number_of_guests === 1 ? 'personne' : 'personnes'} le ${jourNom} ${args.date} à ${args.time}.`,
+      message: `Oui, nous avons de la disponibilité pour ${args.number_of_guests} ${args.number_of_guests === 1 ? "personne" : "personnes"} le ${jourNom} ${args.date} à ${args.time} ${serviceLabel}.`,
       available: true,
+      serviceType: result.serviceType,
     };
   } else {
+    // Si pas disponible, proposer des alternatives
+    let message = result.reason;
+
+    if (result.alternatives && result.alternatives.length > 0) {
+      const alternativesMessage = await formatAlternativesMessage(
+        args.restaurant_id,
+        args.date,
+        args.number_of_guests
+      );
+      if (alternativesMessage) {
+        message += ` ${alternativesMessage}`;
+      } else {
+        message +=
+          " Je peux également vous inscrire sur notre liste d'attente si vous le souhaitez.";
+      }
+    }
+
     return {
       success: false,
-      message: result.reason,
+      message,
       available: false,
+      alternatives: result.alternatives,
     };
   }
 }
 
 // Tool 2: Créer une réservation
 export async function handleCreateReservation(args: CreateReservationArgs) {
-  console.log("📝 create_reservation called with:", JSON.stringify(args, null, 2));
+  console.log(
+    "📝 create_reservation called with:",
+    JSON.stringify(args, null, 2)
+  );
 
   try {
-    // Vérifier d'abord la disponibilité
+    // 1. Vérifier si c'est un grand groupe (> 8 personnes)
+    if (args.number_of_guests > LARGE_GROUP_THRESHOLD) {
+      console.log(
+        `👥 Grand groupe détecté: ${args.number_of_guests} personnes`
+      );
+
+      // Ajouter à la waitlist avec statut "needs_manager_call"
+      const waitlistResult = await addToWaitlist({
+        restaurantId: args.restaurant_id,
+        customerName: args.customer_name,
+        customerPhone: args.customer_phone,
+        customerEmail: args.customer_email,
+        desiredDate: args.date,
+        desiredTime: args.time,
+        partySize: args.number_of_guests,
+        notes: `Grand groupe - ${args.special_requests || ""}`,
+        callId: args.call_id,
+        status: "needs_manager_call",
+      });
+
+      return {
+        success: true,
+        requires_callback: true,
+        message: `Pour les groupes de ${args.number_of_guests} personnes, je dois prendre vos coordonnées et le gérant vous rappellera dans les 24 heures pour finaliser votre réservation et discuter des conditions. Vos coordonnées ont bien été enregistrées.`,
+        action: "transfer_to_manager",
+      };
+    }
+
+    // 2. Vérifier si un doublon existe (même téléphone + même date)
+    console.log("📝 Checking for duplicate reservation...");
+    const duplicateCheck = await checkDuplicateReservation(supabaseAdmin, {
+      restaurantId: args.restaurant_id,
+      customerPhone: args.customer_phone,
+      date: args.date,
+    });
+
+    if (duplicateCheck.hasDuplicate && duplicateCheck.existingReservation) {
+      console.log(
+        "⚠️ Duplicate found:",
+        duplicateCheck.existingReservation.id
+      );
+      return {
+        success: false,
+        has_existing_reservation: true,
+        existing_reservation: duplicateCheck.existingReservation,
+        message: `Vous avez déjà une réservation pour le ${args.date} à ${duplicateCheck.existingReservation.reservation_time} pour ${duplicateCheck.existingReservation.number_of_guests} personnes au nom de ${duplicateCheck.existingReservation.customer_name}. Souhaitez-vous la modifier ou en créer une nouvelle ?`,
+      };
+    }
+
+    // 3. Vérifier la disponibilité
     console.log("📝 Checking availability before creating reservation...");
     const availability = await checkAvailability(supabaseAdmin, {
       restaurantId: args.restaurant_id,
@@ -136,18 +295,55 @@ export async function handleCreateReservation(args: CreateReservationArgs) {
       numberOfGuests: args.number_of_guests,
     });
 
-    console.log("📝 Availability check result:", JSON.stringify(availability, null, 2));
+    console.log(
+      "📝 Availability check result:",
+      JSON.stringify(availability, null, 2)
+    );
 
     if (!availability.available) {
       console.log("❌ Not available:", availability.reason);
+
+      // Proposer la waitlist si complet
+      let message = `Désolé, ${availability.reason}`;
+
+      if (availability.alternatives && availability.alternatives.length > 0) {
+        const alternativesMessage = await formatAlternativesMessage(
+          args.restaurant_id,
+          args.date,
+          args.number_of_guests
+        );
+        if (alternativesMessage) {
+          message += ` ${alternativesMessage}`;
+        }
+      }
+
+      message +=
+        " Je peux également vous inscrire sur notre liste d'attente si vous préférez cette date.";
+
       return {
         success: false,
-        message: `Désolé, ${availability.reason}`,
+        message,
+        offer_waitlist: true,
       };
     }
 
-    // Créer la réservation
+    // 4. Calculer le score de confiance
+    const confidenceScore = calculateConfidenceScore(args);
+    const needsConfirmation = confidenceScore < CONFIDENCE_THRESHOLD;
+
+    console.log(
+      `📊 Confidence score: ${confidenceScore}, needs_confirmation: ${needsConfirmation}`
+    );
+
+    // 5. Créer la réservation
     console.log("📝 Creating reservation in database...");
+
+    // Récupérer les infos du restaurant pour le SMS
+    const { data: restaurant } = await supabaseAdmin
+      .from("restaurants")
+      .select("name, sms_enabled")
+      .eq("id", args.restaurant_id)
+      .single();
 
     // Ne passer call_id que s'il existe dans la table calls
     const reservationData: any = {
@@ -160,7 +356,9 @@ export async function handleCreateReservation(args: CreateReservationArgs) {
       number_of_guests: args.number_of_guests,
       special_requests: args.special_requests || null,
       source: "phone",
-      status: "pending",
+      status: needsConfirmation ? "pending" : "confirmed",
+      confidence_score: confidenceScore,
+      needs_confirmation: needsConfirmation,
     };
 
     // Vérifier si le call existe avant de l'associer
@@ -175,7 +373,9 @@ export async function handleCreateReservation(args: CreateReservationArgs) {
         reservationData.call_id = callExists.id;
         console.log("✅ Call ID linked:", callExists.id);
       } else {
-        console.log("⚠️ Call ID not found in database, creating reservation without call_id");
+        console.log(
+          "⚠️ Call ID not found in database, creating reservation without call_id"
+        );
       }
     }
 
@@ -189,21 +389,61 @@ export async function handleCreateReservation(args: CreateReservationArgs) {
       console.error("❌ Database error:", error);
       return {
         success: false,
-        message: "Désolé, une erreur est survenue lors de la création de la réservation. Veuillez réessayer.",
+        message:
+          "Désolé, une erreur est survenue lors de la création de la réservation. Veuillez réessayer.",
       };
     }
 
     console.log("✅ Reservation created successfully:", reservation.id);
 
+    // 6. Envoyer SMS de confirmation si activé
+    if (restaurant?.sms_enabled) {
+      console.log("📱 Sending confirmation SMS...");
+      try {
+        await sendConfirmationSMS({
+          phone: args.customer_phone,
+          customerName: args.customer_name,
+          restaurantName: restaurant.name,
+          date: args.date,
+          time: args.time,
+          guests: args.number_of_guests,
+          cancellationToken: reservation.cancellation_token,
+        });
+        console.log("✅ SMS sent successfully");
+      } catch (smsError) {
+        console.error("⚠️ SMS sending failed:", smsError);
+        // Ne pas bloquer la réservation si le SMS échoue
+      }
+    }
+
     // Format de date en français pour le message
     const dateObj = new Date(args.date);
-    const jours = ["dimanche", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi"];
+    const jours = [
+      "dimanche",
+      "lundi",
+      "mardi",
+      "mercredi",
+      "jeudi",
+      "vendredi",
+      "samedi",
+    ];
     const jourNom = jours[dateObj.getDay()];
+
+    let confirmationMessage = `Parfait ! Votre réservation est confirmée pour ${args.number_of_guests} ${args.number_of_guests === 1 ? "personne" : "personnes"} le ${jourNom} ${args.date} à ${args.time}.`;
+
+    if (restaurant?.sms_enabled) {
+      confirmationMessage +=
+        " Vous allez recevoir un SMS de confirmation avec un lien pour annuler si besoin.";
+    }
+
+    confirmationMessage += " À bientôt !";
 
     return {
       success: true,
-      message: `Parfait ! Votre réservation est confirmée pour ${args.number_of_guests} ${args.number_of_guests === 1 ? 'personne' : 'personnes'} le ${jourNom} ${args.date} à ${args.time}. À bientôt !`,
+      message: confirmationMessage,
       reservation_id: reservation.id,
+      confidence_score: confidenceScore,
+      needs_confirmation: needsConfirmation,
     };
   } catch (error) {
     console.error("❌ Error creating reservation:", error);
@@ -216,7 +456,10 @@ export async function handleCreateReservation(args: CreateReservationArgs) {
 
 // Tool 3: Annuler une réservation
 export async function handleCancelReservation(args: CancelReservationArgs) {
-  console.log("❌ cancel_reservation called with:", JSON.stringify(args, null, 2));
+  console.log(
+    "❌ cancel_reservation called with:",
+    JSON.stringify(args, null, 2)
+  );
 
   try {
     const { error } = await supabaseAdmin
@@ -246,44 +489,32 @@ export async function handleCancelReservation(args: CancelReservationArgs) {
   }
 }
 
-// Tool 4: Rechercher et annuler une réservation par nom
-export async function handleFindAndCancelReservation(args: FindAndCancelReservationArgs) {
-  console.log("🔍 find_and_cancel_reservation called with:", JSON.stringify(args, null, 2));
+// Tool 4: Rechercher et annuler une réservation par nom (avec recherche phonétique)
+export async function handleFindAndCancelReservation(
+  args: FindAndCancelReservationArgs
+) {
+  console.log(
+    "🔍 find_and_cancel_reservation called with:",
+    JSON.stringify(args, null, 2)
+  );
 
   try {
-    // Rechercher la réservation active (non annulée, non complétée) par nom
-    // Stratégie: chercher par mots individuels pour gérer les erreurs de transcription vocale
-    const searchTerms = args.customer_name.trim().split(/\s+/);
-    console.log("🔍 Search terms:", searchTerms);
-
-    let query = supabaseAdmin
-      .from("reservations")
-      .select("*")
-      .eq("restaurant_id", args.restaurant_id)
-      .in("status", ["pending", "confirmed"])
-      .order("reservation_date", { ascending: true })
-      .order("reservation_time", { ascending: true });
-
-    // Chercher si le nom contient AU MOINS UN des mots (nom de famille généralement)
-    // Utiliser OR logic avec ilike sur chaque terme
-    if (searchTerms.length > 0) {
-      const orConditions = searchTerms.map(term => `customer_name.ilike.%${term}%`).join(',');
-      query = query.or(orConditions);
-    }
-
-    // Si le téléphone est fourni, l'utiliser pour affiner la recherche
-    if (args.customer_phone) {
-      query = query.eq("customer_phone", args.customer_phone);
-    }
-
-    const { data: reservations, error: searchError } = await query;
+    // Utiliser la recherche phonétique avec pg_trgm
+    const { data: reservations, error: searchError } = await supabaseAdmin.rpc(
+      "fuzzy_search_reservations",
+      {
+        p_restaurant_id: args.restaurant_id,
+        p_name: args.customer_name,
+        p_phone: args.customer_phone || null,
+        p_min_similarity: 0.3,
+      }
+    );
 
     if (searchError) {
-      console.error("❌ Database error:", searchError);
-      return {
-        success: false,
-        message: `Erreur lors de la recherche: ${searchError.message}`,
-      };
+      console.error("❌ Search error:", searchError);
+
+      // Fallback à la recherche classique si la fonction n'existe pas encore
+      return await fallbackFindAndCancel(args);
     }
 
     if (!reservations || reservations.length === 0) {
@@ -294,7 +525,29 @@ export async function handleFindAndCancelReservation(args: FindAndCancelReservat
       };
     }
 
-    // Si plusieurs réservations trouvées, prendre la plus proche dans le futur
+    // Si plusieurs réservations avec des scores proches, demander précision
+    if (reservations.length > 1) {
+      const topScore = reservations[0].similarity_score;
+      const closeMatches = reservations.filter(
+        (r: any) => Math.abs(r.similarity_score - topScore) < 0.1
+      );
+
+      if (closeMatches.length > 1 && !args.customer_phone) {
+        const matchNames = closeMatches
+          .map(
+            (r: any) =>
+              `${r.customer_name} (${new Date(r.reservation_date).toLocaleDateString("fr-FR")} à ${r.reservation_time})`
+          )
+          .join(", ");
+        return {
+          success: false,
+          needs_clarification: true,
+          message: `J'ai trouvé plusieurs réservations similaires: ${matchNames}. Pouvez-vous me confirmer le numéro de téléphone pour identifier la bonne réservation ?`,
+        };
+      }
+    }
+
+    // Prendre la meilleure correspondance
     const reservation = reservations[0];
 
     // Annuler la réservation trouvée
@@ -315,16 +568,16 @@ export async function handleFindAndCancelReservation(args: FindAndCancelReservat
 
     // Formater la date pour le message de confirmation
     const reservationDate = new Date(reservation.reservation_date);
-    const dateStr = reservationDate.toLocaleDateString('fr-FR', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
+    const dateStr = reservationDate.toLocaleDateString("fr-FR", {
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
     });
 
     return {
       success: true,
-      message: `Réservation annulée avec succès. Il s'agissait de la réservation pour ${reservation.number_of_guests} personne${reservation.number_of_guests > 1 ? 's' : ''} le ${dateStr} à ${reservation.reservation_time}.`,
+      message: `Réservation annulée avec succès. Il s'agissait de la réservation pour ${reservation.number_of_guests} personne${reservation.number_of_guests > 1 ? "s" : ""} le ${dateStr} à ${reservation.reservation_time}.`,
     };
   } catch (error) {
     console.error("❌ Error in find_and_cancel_reservation:", error);
@@ -335,43 +588,91 @@ export async function handleFindAndCancelReservation(args: FindAndCancelReservat
   }
 }
 
-// Tool 5: Rechercher et modifier une réservation
-export async function handleFindAndUpdateReservation(args: FindAndUpdateReservationArgs) {
-  console.log("✏️ find_and_update_reservation called with:", JSON.stringify(args, null, 2));
+// Fallback pour la recherche classique (si pg_trgm n'est pas disponible)
+async function fallbackFindAndCancel(args: FindAndCancelReservationArgs) {
+  const searchTerms = args.customer_name.trim().split(/\s+/);
+
+  let query = supabaseAdmin
+    .from("reservations")
+    .select("*")
+    .eq("restaurant_id", args.restaurant_id)
+    .in("status", ["pending", "confirmed"])
+    .order("reservation_date", { ascending: true })
+    .order("reservation_time", { ascending: true });
+
+  if (searchTerms.length > 0) {
+    const orConditions = searchTerms
+      .map((term) => `customer_name.ilike.%${term}%`)
+      .join(",");
+    query = query.or(orConditions);
+  }
+
+  if (args.customer_phone) {
+    query = query.eq("customer_phone", args.customer_phone);
+  }
+
+  const { data: reservations, error: searchError } = await query;
+
+  if (searchError || !reservations || reservations.length === 0) {
+    return {
+      success: false,
+      message: `Aucune réservation trouvée au nom de ${args.customer_name}.`,
+    };
+  }
+
+  const reservation = reservations[0];
+
+  const { error: updateError } = await supabaseAdmin
+    .from("reservations")
+    .update({ status: "cancelled" })
+    .eq("id", reservation.id);
+
+  if (updateError) {
+    return {
+      success: false,
+      message: `Erreur lors de l'annulation: ${updateError.message}`,
+    };
+  }
+
+  const reservationDate = new Date(reservation.reservation_date);
+  const dateStr = reservationDate.toLocaleDateString("fr-FR", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+
+  return {
+    success: true,
+    message: `Réservation annulée avec succès. Il s'agissait de la réservation pour ${reservation.number_of_guests} personne${reservation.number_of_guests > 1 ? "s" : ""} le ${dateStr} à ${reservation.reservation_time}.`,
+  };
+}
+
+// Tool 5: Rechercher et modifier une réservation (avec recherche phonétique)
+export async function handleFindAndUpdateReservation(
+  args: FindAndUpdateReservationArgs
+) {
+  console.log(
+    "✏️ find_and_update_reservation called with:",
+    JSON.stringify(args, null, 2)
+  );
 
   try {
-    // Rechercher la réservation active par nom
-    // Stratégie: chercher par mots individuels pour gérer les erreurs de transcription vocale
-    const searchTerms = args.customer_name.trim().split(/\s+/);
-    console.log("✏️ Search terms:", searchTerms);
-
-    let query = supabaseAdmin
-      .from("reservations")
-      .select("*")
-      .eq("restaurant_id", args.restaurant_id)
-      .in("status", ["pending", "confirmed"])
-      .order("reservation_date", { ascending: true })
-      .order("reservation_time", { ascending: true });
-
-    // Chercher si le nom contient AU MOINS UN des mots (nom de famille généralement)
-    // Utiliser OR logic avec ilike sur chaque terme
-    if (searchTerms.length > 0) {
-      const orConditions = searchTerms.map(term => `customer_name.ilike.%${term}%`).join(',');
-      query = query.or(orConditions);
-    }
-
-    if (args.customer_phone) {
-      query = query.eq("customer_phone", args.customer_phone);
-    }
-
-    const { data: reservations, error: searchError } = await query;
+    // Utiliser la recherche phonétique avec pg_trgm
+    const { data: reservations, error: searchError } = await supabaseAdmin.rpc(
+      "fuzzy_search_reservations",
+      {
+        p_restaurant_id: args.restaurant_id,
+        p_name: args.customer_name,
+        p_phone: args.customer_phone || null,
+        p_min_similarity: 0.3,
+      }
+    );
 
     if (searchError) {
-      console.error("❌ Database error:", searchError);
-      return {
-        success: false,
-        message: `Erreur lors de la recherche: ${searchError.message}`,
-      };
+      console.error("❌ Search error:", searchError);
+      // Fallback à la recherche classique
+      return await fallbackFindAndUpdate(args);
     }
 
     if (!reservations || reservations.length === 0) {
@@ -382,14 +683,30 @@ export async function handleFindAndUpdateReservation(args: FindAndUpdateReservat
       };
     }
 
+    // Gérer les cas de multiples correspondances
+    if (reservations.length > 1 && !args.customer_phone) {
+      const topScore = reservations[0].similarity_score;
+      const closeMatches = reservations.filter(
+        (r: any) => Math.abs(r.similarity_score - topScore) < 0.1
+      );
+
+      if (closeMatches.length > 1) {
+        return {
+          success: false,
+          needs_clarification: true,
+          message: `J'ai trouvé plusieurs réservations similaires. Pouvez-vous me confirmer le numéro de téléphone pour identifier la bonne réservation ?`,
+        };
+      }
+    }
+
     const reservation = reservations[0];
 
-    // Préparer les nouvelles valeurs (garder les anciennes si non fournies)
+    // Préparer les nouvelles valeurs
     const newDate = args.new_date || reservation.reservation_date;
     const newTime = args.new_time || reservation.reservation_time;
     const newGuests = args.new_number_of_guests || reservation.number_of_guests;
 
-    // Si la date ou l'heure ou le nombre de personnes change, vérifier la disponibilité
+    // Vérifier la disponibilité si changement
     if (args.new_date || args.new_time || args.new_number_of_guests) {
       const availabilityResult = await checkAvailability(supabaseAdmin, {
         restaurantId: args.restaurant_id,
@@ -399,25 +716,14 @@ export async function handleFindAndUpdateReservation(args: FindAndUpdateReservat
       });
 
       if (!availabilityResult.available) {
-        console.log("⚠️ New slot not available");
         return {
           success: false,
-          message: availabilityResult.message,
+          message: `Désolé, ${availabilityResult.reason}`,
         };
       }
     }
 
     // Mettre à jour la réservation
-    console.log("🔄 Attempting to update reservation:", {
-      id: reservation.id,
-      old_date: reservation.reservation_date,
-      old_time: reservation.reservation_time,
-      old_guests: reservation.number_of_guests,
-      new_date: newDate,
-      new_time: newTime,
-      new_guests: newGuests,
-    });
-
     const { data: updateData, error: updateError } = await supabaseAdmin
       .from("reservations")
       .update({
@@ -436,31 +742,19 @@ export async function handleFindAndUpdateReservation(args: FindAndUpdateReservat
       };
     }
 
-    if (!updateData || updateData.length === 0) {
-      console.error("❌ Update returned no data - possible RLS issue");
-      return {
-        success: false,
-        message: "Erreur: La modification n'a pas pu être effectuée. Veuillez réessayer.",
-      };
-    }
+    console.log("✅ Reservation updated successfully:", reservation.id);
 
-    console.log("✅ Reservation updated successfully:", {
-      id: reservation.id,
-      updated_data: updateData,
-    });
-
-    // Formater la nouvelle date pour le message
     const reservationDate = new Date(newDate);
-    const dateStr = reservationDate.toLocaleDateString('fr-FR', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
+    const dateStr = reservationDate.toLocaleDateString("fr-FR", {
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
     });
 
     return {
       success: true,
-      message: `Réservation modifiée avec succès. Vous êtes maintenant ${newGuests} personne${newGuests > 1 ? 's' : ''} le ${dateStr} à ${newTime}.`,
+      message: `Réservation modifiée avec succès. Vous êtes maintenant ${newGuests} personne${newGuests > 1 ? "s" : ""} le ${dateStr} à ${newTime}.`,
     };
   } catch (error) {
     console.error("❌ Error in find_and_update_reservation:", error);
@@ -469,6 +763,134 @@ export async function handleFindAndUpdateReservation(args: FindAndUpdateReservat
       message: "Une erreur est survenue lors de la modification",
     };
   }
+}
+
+// Fallback pour la modification classique
+async function fallbackFindAndUpdate(args: FindAndUpdateReservationArgs) {
+  const searchTerms = args.customer_name.trim().split(/\s+/);
+
+  let query = supabaseAdmin
+    .from("reservations")
+    .select("*")
+    .eq("restaurant_id", args.restaurant_id)
+    .in("status", ["pending", "confirmed"])
+    .order("reservation_date", { ascending: true });
+
+  if (searchTerms.length > 0) {
+    const orConditions = searchTerms
+      .map((term) => `customer_name.ilike.%${term}%`)
+      .join(",");
+    query = query.or(orConditions);
+  }
+
+  if (args.customer_phone) {
+    query = query.eq("customer_phone", args.customer_phone);
+  }
+
+  const { data: reservations, error } = await query;
+
+  if (error || !reservations || reservations.length === 0) {
+    return {
+      success: false,
+      message: `Aucune réservation trouvée au nom de ${args.customer_name}.`,
+    };
+  }
+
+  const reservation = reservations[0];
+  const newDate = args.new_date || reservation.reservation_date;
+  const newTime = args.new_time || reservation.reservation_time;
+  const newGuests = args.new_number_of_guests || reservation.number_of_guests;
+
+  if (args.new_date || args.new_time || args.new_number_of_guests) {
+    const availabilityResult = await checkAvailability(supabaseAdmin, {
+      restaurantId: args.restaurant_id,
+      date: newDate,
+      time: newTime,
+      numberOfGuests: newGuests,
+    });
+
+    if (!availabilityResult.available) {
+      return {
+        success: false,
+        message: availabilityResult.reason,
+      };
+    }
+  }
+
+  const { error: updateError } = await supabaseAdmin
+    .from("reservations")
+    .update({
+      reservation_date: newDate,
+      reservation_time: newTime,
+      number_of_guests: newGuests,
+    })
+    .eq("id", reservation.id);
+
+  if (updateError) {
+    return {
+      success: false,
+      message: `Erreur lors de la modification: ${updateError.message}`,
+    };
+  }
+
+  const dateStr = new Date(newDate).toLocaleDateString("fr-FR", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+
+  return {
+    success: true,
+    message: `Réservation modifiée avec succès. Vous êtes maintenant ${newGuests} personne${newGuests > 1 ? "s" : ""} le ${dateStr} à ${newTime}.`,
+  };
+}
+
+// Tool 6: Ajouter à la liste d'attente
+interface AddToWaitlistArgs {
+  restaurant_id: string;
+  customer_name: string;
+  customer_phone: string;
+  customer_email?: string;
+  date: string;
+  time?: string;
+  number_of_guests: number;
+  notes?: string;
+  call_id?: string;
+}
+
+export async function handleAddToWaitlist(args: AddToWaitlistArgs) {
+  console.log("📋 add_to_waitlist called with:", JSON.stringify(args, null, 2));
+
+  const result = await addToWaitlist({
+    restaurantId: args.restaurant_id,
+    customerName: args.customer_name,
+    customerPhone: args.customer_phone,
+    customerEmail: args.customer_email,
+    desiredDate: args.date,
+    desiredTime: args.time,
+    partySize: args.number_of_guests,
+    notes: args.notes,
+    callId: args.call_id,
+  });
+
+  return result;
+}
+
+// Tool 7: Transférer l'appel vers un humain
+import { handleTransferCall, type TransferReason } from "./transfer";
+
+interface TransferCallArgs {
+  restaurant_id: string;
+  reason: TransferReason;
+  call_id?: string;
+  guest_count?: number;
+  failed_attempts?: number;
+}
+
+export async function handleTransfer(args: TransferCallArgs) {
+  console.log("🔄 transfer_call called with:", JSON.stringify(args, null, 2));
+  return handleTransferCall(args);
 }
 
 // Router pour gérer les appels de fonctions
@@ -486,6 +908,10 @@ export async function handleToolCall(toolName: string, args: any) {
       return handleFindAndCancelReservation(args);
     case "find_and_update_reservation":
       return handleFindAndUpdateReservation(args);
+    case "add_to_waitlist":
+      return handleAddToWaitlist(args);
+    case "transfer_call":
+      return handleTransfer(args);
     default:
       return {
         success: false,

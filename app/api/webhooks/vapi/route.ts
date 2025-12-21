@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { handleToolCall } from "@/lib/vapi/tools";
+import { withVapiWebhookVerification } from "@/lib/vapi/webhook-verification";
 import type { Database } from "@/types/database";
 
 // Client Supabase avec service role
@@ -17,6 +18,12 @@ export async function POST(request: NextRequest) {
   console.log("URL:", request.url);
   console.log("Method:", request.method);
   console.log("Headers:", Object.fromEntries(request.headers.entries()));
+
+  // Vérification de la signature webhook
+  const verificationError = withVapiWebhookVerification(request);
+  if (verificationError) {
+    return verificationError;
+  }
 
   try {
     const body = await request.json();
