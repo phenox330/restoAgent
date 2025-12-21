@@ -155,9 +155,10 @@ async function fixPhoneInterruption() {
       },
 
       // Prompt mis à jour avec instructions pour les numéros de téléphone
+      // IMPORTANT: Ne pas changer le modèle - garder gpt-4o-mini
       model: {
         provider: "openai",
-        model: "gpt-4o-realtime-preview-2024-12-17",
+        model: "gpt-4o-mini",
         temperature: 0.85,
         maxTokens: 250,
         messages: [
