@@ -89,6 +89,7 @@ export interface Database {
           confidence_score: number
           needs_confirmation: boolean
           cancellation_token: string
+          reminder_sent_at: string | null
           created_at: string
           updated_at: string
         }
@@ -110,6 +111,7 @@ export interface Database {
           confidence_score?: number
           needs_confirmation?: boolean
           cancellation_token?: string
+          reminder_sent_at?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -131,6 +133,7 @@ export interface Database {
           confidence_score?: number
           needs_confirmation?: boolean
           cancellation_token?: string
+          reminder_sent_at?: string | null
           created_at?: string
           updated_at?: string
         }
