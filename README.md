@@ -7,6 +7,7 @@ SaaS de gestion de réservations par agent vocal IA pour restaurants.
 - 🤖 **Agent vocal IA** - Prise de réservations par téléphone 24/7
 - 📅 **Dashboard** - Gestion des réservations en temps réel
 - 📞 **Historique appels** - Transcripts et enregistrements
+- 📱 **SMS** - Confirmations et rappels automatiques (Twilio)
 - 📊 **Export** - Google Sheets integration
 - 🔒 **Multi-tenant** - Un dashboard par restaurant
 
@@ -20,6 +21,7 @@ SaaS de gestion de réservations par agent vocal IA pour restaurants.
 | Database | Supabase (PostgreSQL) |
 | Auth | Supabase Auth (Magic Link) |
 | Voice AI | Vapi.ai |
+| SMS | Twilio |
 | Export | Google Sheets API |
 
 ## Getting Started
@@ -30,6 +32,7 @@ SaaS de gestion de réservations par agent vocal IA pour restaurants.
 - npm ou pnpm
 - Compte Supabase
 - Compte Vapi.ai
+- Compte Twilio (pour les SMS) - voir [docs/TWILIO_SETUP.md](docs/TWILIO_SETUP.md)
 - (Optionnel) Compte Google Cloud pour export Sheets
 
 ### Installation
@@ -66,6 +69,14 @@ SUPABASE_SERVICE_ROLE_KEY=eyJhbG...
 # Vapi
 VAPI_API_KEY=va_xxx
 VAPI_WEBHOOK_SECRET=whsec_xxx
+
+# Twilio SMS
+TWILIO_ACCOUNT_SID=ACxxx
+TWILIO_AUTH_TOKEN=xxx
+TWILIO_PHONE_NUMBER=+12203450018
+
+# Cron Jobs
+CRON_SECRET=your_random_secret_here
 
 # Google (optionnel)
 GOOGLE_CLIENT_ID=xxx.apps.googleusercontent.com
