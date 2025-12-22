@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { MoreVertical, Check, X, Clock, Trash2, CheckCircle2 } from "lucide-react";
+import { MoreVertical, Check, X, Clock, Trash2, CheckCircle2, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -24,6 +24,7 @@ import {
   deleteReservation,
   confirmReservationManually,
 } from "@/lib/reservations/actions";
+import { ReservationDetailsDialog } from "./reservation-details-dialog";
 import type { Reservation } from "@/types";
 
 interface ReservationActionsProps {
@@ -34,6 +35,7 @@ export function ReservationActions({ reservation }: ReservationActionsProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
 
   async function handleStatusChange(status: Reservation["status"]) {
     setLoading(true);
@@ -80,7 +82,7 @@ export function ReservationActions({ reservation }: ReservationActionsProps) {
 
   return (
     <>
-      <div className="flex items-center gap-2">
+      <div className="flex items-center justify-end gap-2">
         {/* Bouton de confirmation rapide pour les réservations à confirmer */}
         {needsConfirmation && (
           <Button
@@ -102,6 +104,13 @@ export function ReservationActions({ reservation }: ReservationActionsProps) {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
+            {/* Option pour voir les détails */}
+            <DropdownMenuItem onClick={() => setDetailsDialogOpen(true)}>
+              <Eye className="mr-2 h-4 w-4" />
+              Voir détails
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+
             {/* Option de confirmation manuelle si nécessaire */}
             {needsConfirmation && (
               <>
@@ -175,6 +184,13 @@ export function ReservationActions({ reservation }: ReservationActionsProps) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Dialog des détails */}
+      <ReservationDetailsDialog
+        reservation={reservation}
+        open={detailsDialogOpen}
+        onOpenChange={setDetailsDialogOpen}
+      />
     </>
   );
 }

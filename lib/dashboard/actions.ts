@@ -8,6 +8,7 @@ export interface DashboardStats {
   monthCalls: number
   confirmationRate: number
   restaurantName: string | null
+  needsConfirmationCount: number
 }
 
 /**
@@ -25,6 +26,7 @@ export async function getDashboardStats(): Promise<DashboardStats> {
       monthCalls: 0,
       confirmationRate: 0,
       restaurantName: null,
+      needsConfirmationCount: 0,
     }
   }
 
@@ -40,6 +42,7 @@ export async function getDashboardStats(): Promise<DashboardStats> {
       monthCalls: 0,
       confirmationRate: 0,
       restaurantName: null,
+      needsConfirmationCount: 0,
     }
   }
 
@@ -72,10 +75,19 @@ export async function getDashboardStats(): Promise<DashboardStats> {
     ? Math.round((stats.confirmed_count / stats.total_reservations) * 100)
     : 0
 
+  // 5. Réservations nécessitant confirmation
+  const { count: needsConfirmationCount } = await supabase
+    .from('reservations')
+    .select('*', { count: 'exact', head: true })
+    .eq('restaurant_id', restaurant.id)
+    .eq('needs_confirmation', true)
+    .in('status', ['pending', 'confirmed'])
+
   return {
     todayReservations: todayReservationsCount ?? 0,
     monthCalls: monthCallsCount ?? 0,
     confirmationRate,
     restaurantName: restaurant.name,
+    needsConfirmationCount: needsConfirmationCount ?? 0,
   }
 }

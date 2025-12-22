@@ -184,6 +184,71 @@ export async function confirmReservationManually(reservationId: string) {
   }
 }
 
+/**
+ * Met à jour une réservation
+ */
+export async function updateReservation(
+  reservationId: string,
+  data: {
+    reservation_date?: string;
+    reservation_time?: string;
+    number_of_guests?: number;
+    internal_notes?: string | null;
+    special_requests?: string | null;
+  }
+) {
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+      return { error: "Non authentifié" };
+    }
+
+    // Vérifier que la réservation appartient au restaurant de l'utilisateur
+    const { data: reservation } = await supabase
+      .from("reservations")
+      .select("restaurant_id")
+      .eq("id", reservationId)
+      .single();
+
+    if (!reservation) {
+      return { error: "Réservation non trouvée" };
+    }
+
+    const { data: restaurant } = await supabase
+      .from("restaurants")
+      .select("id")
+      .eq("id", reservation.restaurant_id)
+      .eq("user_id", user.id)
+      .single();
+
+    if (!restaurant) {
+      return { error: "Non autorisé" };
+    }
+
+    // Mettre à jour la réservation
+    const { data: updatedReservation, error } = await supabase
+      .from("reservations")
+      .update(data)
+      .eq("id", reservationId)
+      .select()
+      .single();
+
+    if (error) {
+      return { error: error.message };
+    }
+
+    revalidatePath("/dashboard/reservations");
+    return { success: true, data: updatedReservation };
+  } catch (error) {
+    if (error instanceof Error) {
+      return { error: error.message };
+    }
+    return { error: "Une erreur est survenue" };
+  }
+}
+
 export async function deleteReservation(reservationId: string) {
   try {
     const supabase = await createClient();
