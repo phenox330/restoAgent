@@ -39,7 +39,7 @@ const RESTAURANT_ID = "fd796afe-61aa-42e3-b2f4-4438a258638b";
 
 // URLs des environnements
 const PRODUCTION_URL = "https://y-lemon-ten.vercel.app/api/webhooks/vapi";
-const STAGING_URL = "https://y-lemon-ten-git-staging-hello-1894s-projects.vercel.app/api/webhooks/vapi"; // URL Vercel staging
+const STAGING_URL = "https://y-git-staging-hello-1894s-projects.vercel.app/api/webhooks/vapi"; // URL Vercel staging
 
 // Sélection de l'URL selon l'environnement
 let SERVER_URL: string;
