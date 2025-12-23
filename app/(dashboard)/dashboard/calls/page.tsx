@@ -17,7 +17,7 @@ export default async function CallsPage() {
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <Phone className="h-12 w-12 text-muted-foreground mb-4" />
           <p className="text-muted-foreground">
-            Configurez d'abord votre restaurant pour voir les appels
+            Configurez d&apos;abord votre restaurant pour voir les appels
           </p>
         </div>
       </div>

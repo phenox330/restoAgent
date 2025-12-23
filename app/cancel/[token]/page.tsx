@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
@@ -36,13 +36,7 @@ export default function CancelReservationPage() {
   const [isCancelling, setIsCancelling] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (token) {
-      fetchReservation();
-    }
-  }, [token]);
-
-  const fetchReservation = async () => {
+  const fetchReservation = useCallback(async () => {
     try {
       const response = await fetch(`/api/cancel/${token}`);
       const data = await response.json();
@@ -60,11 +54,17 @@ export default function CancelReservationPage() {
         setError(data.error || "Une erreur est survenue");
         setPageState("error");
       }
-    } catch (err) {
+    } catch {
       setError("Impossible de charger les informations de la réservation");
       setPageState("error");
     }
-  };
+  }, [token]);
+
+  useEffect(() => {
+    if (token) {
+      fetchReservation();
+    }
+  }, [token, fetchReservation]);
 
   const handleCancel = async () => {
     setIsCancelling(true);
@@ -121,7 +121,7 @@ export default function CancelReservationPage() {
             <XCircle className="h-16 w-16 text-gray-400 mx-auto mb-4" />
             <CardTitle>Réservation introuvable</CardTitle>
             <CardDescription>
-              Ce lien d'annulation n'est pas valide ou a expiré.
+              Ce lien d&apos;annulation n&apos;est pas valide ou a expiré.
             </CardDescription>
           </CardHeader>
           <CardFooter className="justify-center">

@@ -214,7 +214,7 @@ export function LiveFeed({ restaurantId, initialCalls }: LiveFeedProps) {
                       <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
                         <DialogHeader>
                           <DialogTitle>
-                            Transcript de l'appel - {call.phone_number}
+                            Transcript de l&apos;appel - {call.phone_number}
                           </DialogTitle>
                           <DialogDescription>
                             {format(
