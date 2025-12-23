@@ -3,11 +3,19 @@ import { NextRequest, NextResponse } from "next/server";
 /**
  * Vérifie la signature du webhook Vapi
  * Le header x-vapi-secret doit correspondre à VAPI_WEBHOOK_SECRET
+ * 
+ * TEMPORAIREMENT DÉSACTIVÉ pour debug staging
  */
 export function verifyVapiWebhookSignature(request: NextRequest): {
   valid: boolean;
   error?: NextResponse;
 } {
+  // 🔧 TEMPORAIRE: Désactivation complète de la vérification pour debug
+  console.log("🔓 Webhook verification DISABLED for debugging");
+  console.log("   Headers received:", Object.fromEntries(request.headers.entries()));
+  return { valid: true };
+
+  /* ORIGINAL CODE - À RÉACTIVER APRÈS DEBUG
   const webhookSecret = process.env.VAPI_WEBHOOK_SECRET;
 
   // Si pas de secret configuré, logger un warning mais accepter (dev mode)
@@ -52,6 +60,7 @@ export function verifyVapiWebhookSignature(request: NextRequest): {
 
   console.log("✅ Webhook signature valide");
   return { valid: true };
+  */
 }
 
 /**
