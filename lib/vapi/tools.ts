@@ -34,7 +34,7 @@ interface CheckAvailabilityArgs {
 interface CreateReservationArgs {
   restaurant_id: string;
   customer_name: string;
-  customer_phone: string;
+  customer_phone?: string; // Optionnel - injecté automatiquement depuis Twilio
   customer_email?: string;
   date: string;
   time: string;
@@ -252,7 +252,7 @@ export async function handleCreateReservation(args: CreateReservationArgs) {
     // 0. Validation des champs requis
     const missingFields: string[] = [];
     if (!args.customer_name) missingFields.push("nom du client");
-    if (!args.customer_phone) missingFields.push("numéro de téléphone");
+    // customer_phone est optionnel - injecté automatiquement depuis Twilio
     if (!args.date) missingFields.push("date");
     if (!args.time) missingFields.push("heure");
     if (!args.number_of_guests && args.number_of_guests !== 0) missingFields.push("nombre de personnes");

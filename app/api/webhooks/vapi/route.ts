@@ -121,11 +121,14 @@ export async function POST(request: NextRequest) {
             });
           }
 
-          // Ajouter le restaurant_id aux paramètres si disponible
+          // Ajouter le restaurant_id et le numéro Twilio aux paramètres si disponibles
+          const twilioPhone = message.call?.customer?.number;
           const enrichedParams = {
             ...parameters,
             ...(restaurantId && { restaurant_id: restaurantId }),
             call_id: message.call?.id,
+            // Injecter automatiquement le numéro Twilio si disponible et non déjà fourni
+            ...(!parameters?.customer_phone && twilioPhone && { customer_phone: twilioPhone }),
           };
 
           console.log("Enriched params:", JSON.stringify(enrichedParams, null, 2));
