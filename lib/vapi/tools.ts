@@ -1,23 +1,10 @@
 // @ts-nocheck
-import { createClient } from "@supabase/supabase-js";
 import { checkAvailability, checkDuplicateReservation, getServiceType } from "./availability";
 import { addToWaitlist, formatAlternativesMessage } from "./waitlist";
 import { sendConfirmationSMS } from "@/lib/sms/twilio";
 import { JOURS_FR, MOIS_FR } from "@/lib/utils/date-fr";
+import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import type { Database } from "@/types/database";
-
-// Client Supabase avec service role pour bypass RLS (création paresseuse)
-let supabaseAdminInstance: ReturnType<typeof createClient<Database>> | null = null;
-
-function getSupabaseAdmin() {
-  if (!supabaseAdminInstance) {
-    supabaseAdminInstance = createClient<Database>(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
-  }
-  return supabaseAdminInstance;
-}
 
 // Seuil pour groupes nécessitant validation manager
 const LARGE_GROUP_THRESHOLD = 8;

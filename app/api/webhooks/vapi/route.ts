@@ -1,15 +1,9 @@
 // @ts-nocheck
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 import { handleToolCall } from "@/lib/vapi/tools";
 import { withVapiWebhookVerification } from "@/lib/vapi/webhook-verification";
+import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import type { Database } from "@/types/database";
-
-// Client Supabase avec service role
-const supabaseAdmin = createClient<Database>(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 
 export async function POST(request: NextRequest) {
   // Log TOUT dès le début
@@ -193,7 +187,7 @@ export async function POST(request: NextRequest) {
           }
 
           // Vérifier si l'appel existe déjà en base pour éviter les doublons
-          const { data: existingCall } = await supabaseAdmin
+          const { data: existingCall } = await getSupabaseAdmin()
             .from("calls")
             .select("id")
             .eq("vapi_call_id", message.call?.id)
@@ -227,7 +221,7 @@ export async function POST(request: NextRequest) {
 
         // Créer l'enregistrement de l'appel
         // @ts-ignore - Type issue with Supabase generated types
-        const { error } = await supabaseAdmin.from("calls").insert({
+        const { error } = await getSupabaseAdmin().from("calls").insert({
           vapi_call_id: message.call?.id,
           restaurant_id: restaurantId,
           phone_number: message.call?.customer?.number || null,
@@ -250,7 +244,7 @@ export async function POST(request: NextRequest) {
         console.log("Call ended:", message.call?.id);
 
         // Mettre à jour l'enregistrement de l'appel
-        const { error } = await supabaseAdmin
+        const { error } = await getSupabaseAdmin()
           .from("calls")
           // @ts-ignore - Type issue with Supabase generated types
           .update({

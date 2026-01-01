@@ -1,14 +1,8 @@
 // @ts-nocheck
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 import { sendCancellationConfirmationSMS } from "@/lib/sms/twilio";
+import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import type { Database } from "@/types/database";
-
-// Client Supabase avec service role pour bypass RLS
-const supabaseAdmin = createClient<Database>(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 
 interface RouteParams {
   params: Promise<{ token: string }>;
@@ -30,7 +24,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }
 
     // Rechercher la réservation par token d'annulation
-    const { data: reservation, error } = await supabaseAdmin
+    const { data: reservation, error } = await getSupabaseAdmin()
       .from("reservations")
       .select(`
         id,
@@ -95,7 +89,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     // Rechercher la réservation par token
-    const { data: reservation, error: fetchError } = await supabaseAdmin
+    const { data: reservation, error: fetchError } = await getSupabaseAdmin()
       .from("reservations")
       .select(`
         id,
@@ -142,7 +136,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     // Annuler la réservation
-    const { error: updateError } = await supabaseAdmin
+    const { error: updateError } = await getSupabaseAdmin()
       .from("reservations")
       .update({ status: "cancelled" })
       .eq("id", reservation.id);

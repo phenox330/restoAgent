@@ -1,22 +1,9 @@
 // @ts-nocheck
-import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
 import type { WaitlistStatus } from "@/types";
 import { getServiceType } from "./availability";
 import { JOURS_FR, MOIS_FR } from "@/lib/utils/date-fr";
-
-// Client Supabase avec service role pour bypass RLS (création paresseuse)
-let supabaseAdminInstance: ReturnType<typeof createClient<Database>> | null = null;
-
-function getSupabaseAdmin() {
-  if (!supabaseAdminInstance) {
-    supabaseAdminInstance = createClient<Database>(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
-  }
-  return supabaseAdminInstance;
-}
+import { getSupabaseAdmin } from "@/lib/supabase/admin";
 
 interface AddToWaitlistParams {
   restaurantId: string;

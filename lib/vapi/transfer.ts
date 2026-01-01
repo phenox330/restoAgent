@@ -4,21 +4,8 @@
  * Gère les conditions de transfert et l'appel à l'API Vapi
  */
 
-import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
-
-// Client Supabase avec service role (création paresseuse)
-let supabaseAdminInstance: ReturnType<typeof createClient<Database>> | null = null;
-
-function getSupabaseAdmin() {
-  if (!supabaseAdminInstance) {
-    supabaseAdminInstance = createClient<Database>(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
-  }
-  return supabaseAdminInstance;
-}
+import { getSupabaseAdmin } from "@/lib/supabase/admin";
 
 // Seuils pour déclenchement du transfert
 const TRANSFER_THRESHOLDS = {
