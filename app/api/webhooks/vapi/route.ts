@@ -84,24 +84,19 @@ export async function POST(request: NextRequest) {
           }
 
           // Extraire le restaurant_id depuis les paramètres, la metadata de l'assistant, ou du call
-          // TEMPORAIRE: Hardcoded pour debug - à retirer après
-          const HARDCODED_RESTAURANT_ID = 'fd796afe-61aa-42e3-b2f4-4438a258638b';
-          
           const restaurantId =
             parameters?.restaurant_id ||
             message.assistant?.metadata?.restaurant_id ||
             message.call?.metadata?.restaurant_id ||
             body?.assistant?.metadata?.restaurant_id ||
-            body?.call?.metadata?.restaurant_id ||
-            HARDCODED_RESTAURANT_ID; // Fallback pour debug
-          
+            body?.call?.metadata?.restaurant_id;
+
           console.log("🔍 RESTAURANT_ID EXTRACTION:");
           console.log("  - parameters?.restaurant_id:", parameters?.restaurant_id);
           console.log("  - message.assistant?.metadata?.restaurant_id:", message.assistant?.metadata?.restaurant_id);
           console.log("  - message.call?.metadata?.restaurant_id:", message.call?.metadata?.restaurant_id);
           console.log("  - body?.assistant?.metadata?.restaurant_id:", body?.assistant?.metadata?.restaurant_id);
           console.log("  - body?.call?.metadata?.restaurant_id:", body?.call?.metadata?.restaurant_id);
-          console.log("  - HARDCODED_RESTAURANT_ID:", HARDCODED_RESTAURANT_ID);
           console.log("  => FINAL restaurantId:", restaurantId);
 
           // get_current_date n'a pas besoin de restaurant_id
