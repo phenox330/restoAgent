@@ -3,6 +3,8 @@
  * Gère les confirmations de réservation et liens d'annulation
  */
 
+import { formatDateFr } from "@/lib/utils/date-fr";
+
 interface SMSConfirmationParams {
   phone: string;
   customerName: string;
@@ -42,26 +44,7 @@ function formatPhoneNumber(phone: string): string {
 /**
  * Formater la date en français
  */
-function formatDateFr(dateStr: string): string {
-  const date = new Date(dateStr);
-  const jours = ["dim", "lun", "mar", "mer", "jeu", "ven", "sam"];
-  const mois = [
-    "jan",
-    "fév",
-    "mar",
-    "avr",
-    "mai",
-    "juin",
-    "juil",
-    "août",
-    "sep",
-    "oct",
-    "nov",
-    "déc",
-  ];
-
-  return `${jours[date.getDay()]} ${date.getDate()} ${mois[date.getMonth()]}`;
-}
+// formatDateFr est maintenant importé depuis @/lib/utils/date-fr
 
 /**
  * Envoie un SMS de confirmation de réservation
@@ -94,7 +77,7 @@ export async function sendConfirmationSMS(
     const cancellationLink = `${appUrl}/cancel/${params.cancellationToken}`;
 
     // Formater la date
-    const formattedDate = formatDateFr(params.date);
+    const formattedDate = formatDateFr(params.date, true); // Format court pour SMS
 
     // Construire le message SMS (limité à 160 caractères pour éviter les SMS multiples)
     const message =
@@ -174,7 +157,7 @@ export async function sendReminderSMS(params: {
 
   try {
     const toNumber = formatPhoneNumber(params.phone);
-    const formattedDate = formatDateFr(params.date);
+    const formattedDate = formatDateFr(params.date, true); // Format court pour SMS
 
     const message =
       `Rappel ${params.restaurantName}\n` +
@@ -243,7 +226,7 @@ export async function sendCancellationConfirmationSMS(params: {
 
   try {
     const toNumber = formatPhoneNumber(params.phone);
-    const formattedDate = formatDateFr(params.date);
+    const formattedDate = formatDateFr(params.date, true); // Format court pour SMS
 
     const message =
       `${params.restaurantName}\n` +

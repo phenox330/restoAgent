@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { checkAvailability, checkDuplicateReservation, getServiceType } from "./availability";
 import { addToWaitlist, formatAlternativesMessage } from "./waitlist";
 import { sendConfirmationSMS } from "@/lib/sms/twilio";
+import { JOURS_FR, MOIS_FR } from "@/lib/utils/date-fr";
 import type { Database } from "@/types/database";
 
 // Client Supabase avec service role pour bypass RLS (création paresseuse)
@@ -122,39 +123,14 @@ export async function handleGetCurrentDate() {
   const nextWeek = new Date(now);
   nextWeek.setDate(nextWeek.getDate() + 7);
 
-  // Jours de la semaine en français
-  const jours = [
-    "dimanche",
-    "lundi",
-    "mardi",
-    "mercredi",
-    "jeudi",
-    "vendredi",
-    "samedi",
-  ];
-  const mois = [
-    "janvier",
-    "février",
-    "mars",
-    "avril",
-    "mai",
-    "juin",
-    "juillet",
-    "août",
-    "septembre",
-    "octobre",
-    "novembre",
-    "décembre",
-  ];
-
   const result = {
     success: true,
-    message: `Nous sommes le ${jours[now.getDay()]} ${now.getDate()} ${mois[now.getMonth()]} ${now.getFullYear()}`,
+    message: `Nous sommes le ${JOURS_FR.FULL[now.getDay()]} ${now.getDate()} ${MOIS_FR.FULL[now.getMonth()]} ${now.getFullYear()}`,
     current_date: now.toISOString().split("T")[0], // Format YYYY-MM-DD
     current_time: now.toTimeString().split(" ")[0].substring(0, 5), // Format HH:mm
-    day_of_week: jours[now.getDay()],
+    day_of_week: JOURS_FR.FULL[now.getDay()],
     tomorrow_date: tomorrow.toISOString().split("T")[0],
-    tomorrow_day: jours[tomorrow.getDay()],
+    tomorrow_day: JOURS_FR.FULL[tomorrow.getDay()],
     next_week_date: nextWeek.toISOString().split("T")[0],
     year: now.getFullYear(),
     full_datetime: now.toLocaleString("fr-FR", {
@@ -191,16 +167,7 @@ export async function handleCheckAvailability(args: CheckAvailabilityArgs) {
   if (result.available) {
     // Format de date en français
     const dateObj = new Date(args.date);
-    const jours = [
-      "dimanche",
-      "lundi",
-      "mardi",
-      "mercredi",
-      "jeudi",
-      "vendredi",
-      "samedi",
-    ];
-    const jourNom = jours[dateObj.getDay()];
+    const jourNom = JOURS_FR.FULL[dateObj.getDay()];
     const serviceLabel =
       result.serviceType === "lunch" ? "pour le déjeuner" : "pour le dîner";
 
@@ -316,49 +283,26 @@ export async function handleCreateReservation(args: CreateReservationArgs) {
           "⚠️ Duplicate found:",
           duplicateCheck.existingReservation.id
         );
-        
+
         // Formater la date de manière lisible
         const dateObj = new Date(args.date);
-        const jours = [
-          "dimanche",
-          "lundi",
-          "mardi",
-          "mercredi",
-          "jeudi",
-          "vendredi",
-          "samedi",
-        ];
-        const mois = [
-          "janvier",
-          "février",
-          "mars",
-          "avril",
-          "mai",
-          "juin",
-          "juillet",
-          "août",
-          "septembre",
-          "octobre",
-          "novembre",
-          "décembre",
-        ];
-        const jourNom = jours[dateObj.getDay()];
-        const dateFormatee = `${jourNom} ${dateObj.getDate()} ${mois[dateObj.getMonth()]}`;
-        
+        const jourNom = JOURS_FR.FULL[dateObj.getDay()];
+        const dateFormatee = `${jourNom} ${dateObj.getDate()} ${MOIS_FR.FULL[dateObj.getMonth()]}`;
+
         // Déterminer si c'est demain, aujourd'hui ou une autre date
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         const reservationDate = new Date(args.date);
         reservationDate.setHours(0, 0, 0, 0);
         const diffDays = Math.round((reservationDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-        
+
         let dateReference = dateFormatee;
         if (diffDays === 0) {
           dateReference = "aujourd'hui";
         } else if (diffDays === 1) {
           dateReference = "demain";
         }
-        
+
         return {
           success: false,
           has_existing_reservation: true,
@@ -510,16 +454,7 @@ export async function handleCreateReservation(args: CreateReservationArgs) {
 
     // Format de date en français pour le message
     const dateObj = new Date(args.date);
-    const jours = [
-      "dimanche",
-      "lundi",
-      "mardi",
-      "mercredi",
-      "jeudi",
-      "vendredi",
-      "samedi",
-    ];
-    const jourNom = jours[dateObj.getDay()];
+    const jourNom = JOURS_FR.FULL[dateObj.getDay()];
 
     let confirmationMessage = `Parfait ! Votre réservation est confirmée pour ${args.number_of_guests} ${args.number_of_guests === 1 ? "personne" : "personnes"} le ${jourNom} ${args.date} à ${args.time}.`;
 
