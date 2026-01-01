@@ -23,3 +23,6 @@ WHERE status = 'confirmed' AND reminder_sent_at IS NULL;
 
 -- Commentaire sur la colonne
 COMMENT ON COLUMN reservations.reminder_sent_at IS 'Timestamp de l''envoi du SMS de rappel (24h avant). NULL si non envoyé.';
+
+
+

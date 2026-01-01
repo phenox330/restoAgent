@@ -244,6 +244,10 @@ export async function handleCreateReservation(args: CreateReservationArgs) {
     JSON.stringify(args, null, 2)
   );
 
+  // #region agent log
+  fetch('http://127.0.0.1:7243/ingest/cbb14228-acba-489a-aeda-03f99bab8ad4',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'tools.ts:242',message:'create_reservation ENTRY',data:{args},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
+  // #endregion
+
   try {
     // 0. Validation des champs requis
     const missingFields: string[] = [];
@@ -255,6 +259,9 @@ export async function handleCreateReservation(args: CreateReservationArgs) {
 
     if (missingFields.length > 0) {
       console.log("⚠️ Missing required fields:", missingFields);
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/cbb14228-acba-489a-aeda-03f99bab8ad4',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'tools.ts:258',message:'MISSING FIELDS DETECTED',data:{missingFields},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B'})}).catch(()=>{});
+      // #endregion
       return {
         success: false,
         missing_fields: missingFields,
@@ -299,6 +306,10 @@ export async function handleCreateReservation(args: CreateReservationArgs) {
         customerPhone: args.customer_phone,
         date: args.date,
       });
+
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/cbb14228-acba-489a-aeda-03f99bab8ad4',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'tools.ts:305',message:'DUPLICATE CHECK RESULT',data:{hasDuplicate:duplicateCheck.hasDuplicate,existingId:duplicateCheck.existingReservation?.id},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C'})}).catch(()=>{});
+      // #endregion
 
       if (duplicateCheck.hasDuplicate && duplicateCheck.existingReservation) {
         console.log(
@@ -372,6 +383,10 @@ export async function handleCreateReservation(args: CreateReservationArgs) {
       "📝 Availability check result:",
       JSON.stringify(availability, null, 2)
     );
+
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/cbb14228-acba-489a-aeda-03f99bab8ad4',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'tools.ts:380',message:'AVAILABILITY CHECK RESULT',data:{available:availability.available,reason:availability.reason},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D'})}).catch(()=>{});
+    // #endregion
 
     if (!availability.available) {
       console.log("❌ Not available:", availability.reason);
@@ -458,6 +473,10 @@ export async function handleCreateReservation(args: CreateReservationArgs) {
       .select()
       .single();
 
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/cbb14228-acba-489a-aeda-03f99bab8ad4',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'tools.ts:470',message:'DB INSERT RESULT',data:{success:!error,reservationId:reservation?.id,error:error?.message},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'E'})}).catch(()=>{});
+    // #endregion
+
     if (error) {
       console.error("❌ Database error:", error);
       return {
@@ -511,14 +530,23 @@ export async function handleCreateReservation(args: CreateReservationArgs) {
 
     confirmationMessage += " À bientôt !";
 
-    return {
+    const finalResult = {
       success: true,
       message: confirmationMessage,
       reservation_id: reservation.id,
       confidence_score: confidenceScore,
       needs_confirmation: needsConfirmation,
     };
+
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/cbb14228-acba-489a-aeda-03f99bab8ad4',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'tools.ts:530',message:'FINAL SUCCESS RESULT',data:{finalResult},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
+
+    return finalResult;
   } catch (error) {
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/cbb14228-acba-489a-aeda-03f99bab8ad4',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'tools.ts:538',message:'CATCH ERROR',data:{error:error instanceof Error ? error.message : String(error)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'E'})}).catch(()=>{});
+    // #endregion
     console.error("❌ Error creating reservation:", error);
     return {
       success: false,

@@ -160,3 +160,6 @@ export async function GET(request: NextRequest) {
 // Désactiver le cache pour ce endpoint
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+
+
+
