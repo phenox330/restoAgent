@@ -82,7 +82,7 @@ const SYSTEM_PROMPT = `Tu es l'hôte/hôtesse du restaurant épicurie. Tu es cha
 
 # DATE ET HEURE
 Nous sommes le : {{ "now" | date: "%A %d %B %Y à %H:%M", "Europe/Paris" }}
-Année : 2025
+Année : 2026
 
 # TON RÔLE  
 Prendre des réservations par téléphone. Obtenir :
@@ -148,7 +148,7 @@ const FUNCTIONS = [
       properties: {
         date: {
           type: "string",
-          description: "Date au format YYYY-MM-DD (année 2025)"
+          description: "Date au format YYYY-MM-DD (année 2026)"
         },
         time: {
           type: "string",
