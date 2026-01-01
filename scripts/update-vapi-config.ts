@@ -8,8 +8,9 @@
  * - Server URL
  * - Metadata
  * 
- * Usage: 
+ * Usage:
  *   npx tsx scripts/update-vapi-config.ts              # Utilise l'URL par défaut (production)
+ *   npx tsx scripts/update-vapi-config.ts --test       # Utilise l'URL de test (preview deployment)
  *   npx tsx scripts/update-vapi-config.ts --staging    # Utilise l'URL de staging
  *   npx tsx scripts/update-vapi-config.ts --production # Utilise l'URL de production
  * 
@@ -28,6 +29,7 @@ config({ path: resolve(process.cwd(), ".env.local") });
 const args = process.argv.slice(2);
 const isStaging = args.includes("--staging");
 const isProduction = args.includes("--production");
+const isTest = args.includes("--test");
 
 // ============================================================
 // CONFIGURATION
@@ -40,10 +42,14 @@ const RESTAURANT_ID = "fd796afe-61aa-42e3-b2f4-4438a258638b";
 // URLs des environnements
 const PRODUCTION_URL = "https://y-lemon-ten.vercel.app/api/webhooks/vapi";
 const STAGING_URL = "https://y-git-staging-hello-1894s-projects.vercel.app/api/webhooks/vapi"; // URL Vercel staging
+const TEST_URL = "https://y-git-test-appel-vapi-hello-1894s-projects.vercel.app/api/webhooks/vapi"; // URL Vercel test
 
 // Sélection de l'URL selon l'environnement
 let SERVER_URL: string;
-if (isStaging) {
+if (isTest) {
+  SERVER_URL = TEST_URL;
+  console.log("🧪 Mode TEST sélectionné");
+} else if (isStaging) {
   SERVER_URL = STAGING_URL;
   console.log("🔶 Mode STAGING sélectionné");
 } else if (isProduction) {

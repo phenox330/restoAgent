@@ -227,7 +227,7 @@ export async function POST(request: NextRequest) {
         const { error } = await supabaseAdmin.from("calls").insert({
           vapi_call_id: message.call?.id,
           restaurant_id: restaurantId,
-          phone_number: message.call?.customer?.number || "unknown",
+          phone_number: message.call?.customer?.number || null,
           status: "in_progress",
           vapi_metadata: message.call || {},
         });
