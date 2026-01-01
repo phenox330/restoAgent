@@ -4,6 +4,7 @@
  */
 
 import { formatDateFr } from "@/lib/utils/date-fr";
+import { formatPhoneE164 } from "@/lib/utils/phone";
 
 interface SMSConfirmationParams {
   phone: string;
@@ -21,30 +22,7 @@ interface SMSResult {
   error?: string;
 }
 
-/**
- * Formater le numéro de téléphone au format E.164
- */
-function formatPhoneNumber(phone: string): string {
-  // Supprimer tous les caractères non numériques sauf le +
-  let cleaned = phone.replace(/[^\d+]/g, "");
-
-  // Si le numéro commence par 0 (format français), le convertir en +33
-  if (cleaned.startsWith("0")) {
-    cleaned = "+33" + cleaned.substring(1);
-  }
-
-  // Si le numéro ne commence pas par +, ajouter +33 par défaut
-  if (!cleaned.startsWith("+")) {
-    cleaned = "+33" + cleaned;
-  }
-
-  return cleaned;
-}
-
-/**
- * Formater la date en français
- */
-// formatDateFr est maintenant importé depuis @/lib/utils/date-fr
+// formatPhoneE164 et formatDateFr sont maintenant importés depuis lib/utils
 
 /**
  * Envoie un SMS de confirmation de réservation
@@ -71,7 +49,7 @@ export async function sendConfirmationSMS(
 
   try {
     // Formater le numéro de téléphone
-    const toNumber = formatPhoneNumber(params.phone);
+    const toNumber = formatPhoneE164(params.phone);
 
     // Générer le lien d'annulation
     const cancellationLink = `${appUrl}/cancel/${params.cancellationToken}`;
@@ -156,7 +134,7 @@ export async function sendReminderSMS(params: {
   }
 
   try {
-    const toNumber = formatPhoneNumber(params.phone);
+    const toNumber = formatPhoneE164(params.phone);
     const formattedDate = formatDateFr(params.date, true); // Format court pour SMS
 
     const message =
@@ -225,7 +203,7 @@ export async function sendCancellationConfirmationSMS(params: {
   }
 
   try {
-    const toNumber = formatPhoneNumber(params.phone);
+    const toNumber = formatPhoneE164(params.phone);
     const formattedDate = formatDateFr(params.date, true); // Format court pour SMS
 
     const message =
