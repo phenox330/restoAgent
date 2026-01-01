@@ -11,6 +11,8 @@
 import { config } from "dotenv";
 config({ path: ".env.local" });
 
+import { formatDateFr } from "../lib/utils/date-fr";
+
 const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID;
 const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
 const TWILIO_PHONE_NUMBER = process.env.TWILIO_PHONE_NUMBER;
@@ -98,37 +100,32 @@ async function testAllSMSTypes() {
 
   // 1. SMS de confirmation
   console.log("1️⃣ SMS de Confirmation:");
-  const confirmationMsg = 
+  const confirmationMsg =
     `${restaurantName}: Réservation confirmée!\n` +
-    `${formatDateFr(dateStr)} à ${time}\n` +
+    `${formatDateFr(dateStr, true)} à ${time}\n` +
     `${guests} pers.\n` +
     `Annuler: https://restoagent.app/cancel/${cancellationToken}`;
   console.log(`   ${confirmationMsg.replace(/\n/g, "\n   ")}\n`);
 
   // 2. SMS de rappel
   console.log("2️⃣ SMS de Rappel:");
-  const reminderMsg = 
+  const reminderMsg =
     `Rappel ${restaurantName}\n` +
-    `Réservation demain ${formatDateFr(dateStr)} à ${time}\n` +
+    `Réservation demain ${formatDateFr(dateStr, true)} à ${time}\n` +
     `${guests} personnes\n` +
     `À bientôt!`;
   console.log(`   ${reminderMsg.replace(/\n/g, "\n   ")}\n`);
 
   // 3. SMS d'annulation
   console.log("3️⃣ SMS d'Annulation:");
-  const cancellationMsg = 
+  const cancellationMsg =
     `${restaurantName}\n` +
-    `Votre réservation du ${formatDateFr(dateStr)} à ${time} a été annulée.\n` +
+    `Votre réservation du ${formatDateFr(dateStr, true)} à ${time} a été annulée.\n` +
     `À bientôt!`;
   console.log(`   ${cancellationMsg.replace(/\n/g, "\n   ")}\n`);
 }
 
-function formatDateFr(dateStr: string): string {
-  const date = new Date(dateStr);
-  const jours = ["dim", "lun", "mar", "mer", "jeu", "ven", "sam"];
-  const mois = ["jan", "fév", "mar", "avr", "mai", "juin", "juil", "août", "sep", "oct", "nov", "déc"];
-  return `${jours[date.getDay()]} ${date.getDate()} ${mois[date.getMonth()]}`;
-}
+// formatDateFr is now imported from lib/utils/date-fr
 
 // Exécution
 console.log("=".repeat(60));
@@ -138,3 +135,6 @@ console.log("=".repeat(60) + "\n");
 testSMS()
   .then(() => testAllSMSTypes())
   .catch(console.error);
+
+
+

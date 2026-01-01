@@ -1,15 +1,9 @@
 // @ts-nocheck
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 import { handleToolCall } from "@/lib/vapi/tools";
 import { withVapiWebhookVerification } from "@/lib/vapi/webhook-verification";
+import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import type { Database } from "@/types/database";
-
-// Client Supabase avec service role
-const supabaseAdmin = createClient<Database>(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 
 export async function POST(request: NextRequest) {
   // Log TOUT dès le début
@@ -43,8 +37,14 @@ export async function POST(request: NextRequest) {
       case "tool-calls":
       case "function-call": {
         try {
+          console.log("🔥🔥🔥 TOOL-CALLS REÇU 🔥🔥🔥");
           console.log("=== TOOL-CALLS START ===");
           console.log("Raw tool-calls message:", JSON.stringify(message, null, 2));
+          console.log("🔍 DEBUG - Cherche restaurant_id dans:");
+          console.log("  - message.assistant:", JSON.stringify(message.assistant, null, 2));
+          console.log("  - message.call:", JSON.stringify(message.call, null, 2));
+          console.log("  - body.assistant:", JSON.stringify(body.assistant, null, 2));
+          console.log("  - body.call:", JSON.stringify(body.call, null, 2));
 
           // Support des deux formats (ancien et nouveau)
           const toolCalls = message.toolCalls || (message.functionCall ? [{ function: message.functionCall }] : []);
@@ -87,7 +87,17 @@ export async function POST(request: NextRequest) {
           const restaurantId =
             parameters?.restaurant_id ||
             message.assistant?.metadata?.restaurant_id ||
-            message.call?.metadata?.restaurant_id;
+            message.call?.metadata?.restaurant_id ||
+            body?.assistant?.metadata?.restaurant_id ||
+            body?.call?.metadata?.restaurant_id;
+
+          console.log("🔍 RESTAURANT_ID EXTRACTION:");
+          console.log("  - parameters?.restaurant_id:", parameters?.restaurant_id);
+          console.log("  - message.assistant?.metadata?.restaurant_id:", message.assistant?.metadata?.restaurant_id);
+          console.log("  - message.call?.metadata?.restaurant_id:", message.call?.metadata?.restaurant_id);
+          console.log("  - body?.assistant?.metadata?.restaurant_id:", body?.assistant?.metadata?.restaurant_id);
+          console.log("  - body?.call?.metadata?.restaurant_id:", body?.call?.metadata?.restaurant_id);
+          console.log("  => FINAL restaurantId:", restaurantId);
 
           // get_current_date n'a pas besoin de restaurant_id
           if (!restaurantId && functionName !== 'get_current_date') {
@@ -100,11 +110,14 @@ export async function POST(request: NextRequest) {
             });
           }
 
-          // Ajouter le restaurant_id aux paramètres si disponible
+          // Ajouter le restaurant_id et le numéro Twilio aux paramètres si disponibles
+          const twilioPhone = message.call?.customer?.number;
           const enrichedParams = {
             ...parameters,
             ...(restaurantId && { restaurant_id: restaurantId }),
             call_id: message.call?.id,
+            // Injecter automatiquement le numéro Twilio si disponible et non déjà fourni
+            ...(!parameters?.customer_phone && twilioPhone && { customer_phone: twilioPhone }),
           };
 
           console.log("Enriched params:", JSON.stringify(enrichedParams, null, 2));
@@ -169,7 +182,7 @@ export async function POST(request: NextRequest) {
           }
 
           // Vérifier si l'appel existe déjà en base pour éviter les doublons
-          const { data: existingCall } = await supabaseAdmin
+          const { data: existingCall } = await getSupabaseAdmin()
             .from("calls")
             .select("id")
             .eq("vapi_call_id", message.call?.id)
@@ -203,10 +216,10 @@ export async function POST(request: NextRequest) {
 
         // Créer l'enregistrement de l'appel
         // @ts-ignore - Type issue with Supabase generated types
-        const { error } = await supabaseAdmin.from("calls").insert({
+        const { error } = await getSupabaseAdmin().from("calls").insert({
           vapi_call_id: message.call?.id,
           restaurant_id: restaurantId,
-          phone_number: message.call?.customer?.number || "unknown",
+          phone_number: message.call?.customer?.number || null,
           status: "in_progress",
           vapi_metadata: message.call || {},
         });
@@ -226,7 +239,7 @@ export async function POST(request: NextRequest) {
         console.log("Call ended:", message.call?.id);
 
         // Mettre à jour l'enregistrement de l'appel
-        const { error } = await supabaseAdmin
+        const { error } = await getSupabaseAdmin()
           .from("calls")
           // @ts-ignore - Type issue with Supabase generated types
           .update({

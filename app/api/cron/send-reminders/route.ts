@@ -1,14 +1,8 @@
 // @ts-nocheck
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 import { sendReminderSMS } from "@/lib/sms/twilio";
+import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import type { Database } from "@/types/database";
-
-// Client Supabase avec service role pour bypass RLS
-const supabaseAdmin = createClient<Database>(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 
 /**
  * GET /api/cron/send-reminders
@@ -44,7 +38,7 @@ export async function GET(request: NextRequest) {
 
     // Récupérer les réservations confirmées pour demain
     // qui n'ont pas encore reçu de rappel
-    const { data: reservations, error: fetchError } = await supabaseAdmin
+    const { data: reservations, error: fetchError } = await getSupabaseAdmin()
       .from("reservations")
       .select(`
         id,
@@ -113,7 +107,7 @@ export async function GET(request: NextRequest) {
 
         if (smsResult.success) {
           // Mettre à jour reminder_sent_at
-          const { error: updateError } = await supabaseAdmin
+          const { error: updateError } = await getSupabaseAdmin()
             .from("reservations")
             .update({ reminder_sent_at: new Date().toISOString() })
             .eq("id", reservation.id);
@@ -160,3 +154,6 @@ export async function GET(request: NextRequest) {
 // Désactiver le cache pour ce endpoint
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+
+
+

@@ -1,21 +1,9 @@
 // @ts-nocheck
-import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
 import type { WaitlistStatus } from "@/types";
 import { getServiceType } from "./availability";
-
-// Client Supabase avec service role pour bypass RLS (création paresseuse)
-let supabaseAdminInstance: ReturnType<typeof createClient<Database>> | null = null;
-
-function getSupabaseAdmin() {
-  if (!supabaseAdminInstance) {
-    supabaseAdminInstance = createClient<Database>(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
-  }
-  return supabaseAdminInstance;
-}
+import { JOURS_FR, MOIS_FR } from "@/lib/utils/date-fr";
+import { getSupabaseAdmin } from "@/lib/supabase/admin";
 
 interface AddToWaitlistParams {
   restaurantId: string;
@@ -157,35 +145,11 @@ export async function formatAlternativesMessage(
     }
 
     // Formater les alternatives en français
-    const jours = [
-      "dimanche",
-      "lundi",
-      "mardi",
-      "mercredi",
-      "jeudi",
-      "vendredi",
-      "samedi",
-    ];
-    const mois = [
-      "janvier",
-      "février",
-      "mars",
-      "avril",
-      "mai",
-      "juin",
-      "juillet",
-      "août",
-      "septembre",
-      "octobre",
-      "novembre",
-      "décembre",
-    ];
-
     const formattedAlts = alternatives.slice(0, 3).map((alt: any) => {
       const altDate = new Date(alt.available_date);
-      const jourNom = jours[altDate.getDay()];
+      const jourNom = JOURS_FR.FULL[altDate.getDay()];
       const jour = altDate.getDate();
-      const moisNom = mois[altDate.getMonth()];
+      const moisNom = MOIS_FR.FULL[altDate.getMonth()];
       const serviceLabel = alt.service_type === "lunch" ? "midi" : "soir";
       return `${jourNom} ${jour} ${moisNom} ${serviceLabel}`;
     });

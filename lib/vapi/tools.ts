@@ -1,22 +1,10 @@
 // @ts-nocheck
-import { createClient } from "@supabase/supabase-js";
 import { checkAvailability, checkDuplicateReservation, getServiceType } from "./availability";
 import { addToWaitlist, formatAlternativesMessage } from "./waitlist";
 import { sendConfirmationSMS } from "@/lib/sms/twilio";
+import { JOURS_FR, MOIS_FR } from "@/lib/utils/date-fr";
+import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import type { Database } from "@/types/database";
-
-// Client Supabase avec service role pour bypass RLS (création paresseuse)
-let supabaseAdminInstance: ReturnType<typeof createClient<Database>> | null = null;
-
-function getSupabaseAdmin() {
-  if (!supabaseAdminInstance) {
-    supabaseAdminInstance = createClient<Database>(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
-  }
-  return supabaseAdminInstance;
-}
 
 // Seuil pour groupes nécessitant validation manager
 const LARGE_GROUP_THRESHOLD = 8;
@@ -34,7 +22,7 @@ interface CheckAvailabilityArgs {
 interface CreateReservationArgs {
   restaurant_id: string;
   customer_name: string;
-  customer_phone: string;
+  customer_phone?: string; // Optionnel - injecté automatiquement depuis Twilio
   customer_email?: string;
   date: string;
   time: string;
@@ -122,39 +110,14 @@ export async function handleGetCurrentDate() {
   const nextWeek = new Date(now);
   nextWeek.setDate(nextWeek.getDate() + 7);
 
-  // Jours de la semaine en français
-  const jours = [
-    "dimanche",
-    "lundi",
-    "mardi",
-    "mercredi",
-    "jeudi",
-    "vendredi",
-    "samedi",
-  ];
-  const mois = [
-    "janvier",
-    "février",
-    "mars",
-    "avril",
-    "mai",
-    "juin",
-    "juillet",
-    "août",
-    "septembre",
-    "octobre",
-    "novembre",
-    "décembre",
-  ];
-
   const result = {
     success: true,
-    message: `Nous sommes le ${jours[now.getDay()]} ${now.getDate()} ${mois[now.getMonth()]} ${now.getFullYear()}`,
+    message: `Nous sommes le ${JOURS_FR.FULL[now.getDay()]} ${now.getDate()} ${MOIS_FR.FULL[now.getMonth()]} ${now.getFullYear()}`,
     current_date: now.toISOString().split("T")[0], // Format YYYY-MM-DD
     current_time: now.toTimeString().split(" ")[0].substring(0, 5), // Format HH:mm
-    day_of_week: jours[now.getDay()],
+    day_of_week: JOURS_FR.FULL[now.getDay()],
     tomorrow_date: tomorrow.toISOString().split("T")[0],
-    tomorrow_day: jours[tomorrow.getDay()],
+    tomorrow_day: JOURS_FR.FULL[tomorrow.getDay()],
     next_week_date: nextWeek.toISOString().split("T")[0],
     year: now.getFullYear(),
     full_datetime: now.toLocaleString("fr-FR", {
@@ -191,16 +154,7 @@ export async function handleCheckAvailability(args: CheckAvailabilityArgs) {
   if (result.available) {
     // Format de date en français
     const dateObj = new Date(args.date);
-    const jours = [
-      "dimanche",
-      "lundi",
-      "mardi",
-      "mercredi",
-      "jeudi",
-      "vendredi",
-      "samedi",
-    ];
-    const jourNom = jours[dateObj.getDay()];
+    const jourNom = JOURS_FR.FULL[dateObj.getDay()];
     const serviceLabel =
       result.serviceType === "lunch" ? "pour le déjeuner" : "pour le dîner";
 
@@ -244,11 +198,12 @@ export async function handleCreateReservation(args: CreateReservationArgs) {
     JSON.stringify(args, null, 2)
   );
 
+
   try {
     // 0. Validation des champs requis
     const missingFields: string[] = [];
     if (!args.customer_name) missingFields.push("nom du client");
-    if (!args.customer_phone) missingFields.push("numéro de téléphone");
+    // customer_phone est optionnel - injecté automatiquement depuis Twilio
     if (!args.date) missingFields.push("date");
     if (!args.time) missingFields.push("heure");
     if (!args.number_of_guests && args.number_of_guests !== 0) missingFields.push("nombre de personnes");
@@ -300,54 +255,32 @@ export async function handleCreateReservation(args: CreateReservationArgs) {
         date: args.date,
       });
 
+
       if (duplicateCheck.hasDuplicate && duplicateCheck.existingReservation) {
         console.log(
           "⚠️ Duplicate found:",
           duplicateCheck.existingReservation.id
         );
-        
+
         // Formater la date de manière lisible
         const dateObj = new Date(args.date);
-        const jours = [
-          "dimanche",
-          "lundi",
-          "mardi",
-          "mercredi",
-          "jeudi",
-          "vendredi",
-          "samedi",
-        ];
-        const mois = [
-          "janvier",
-          "février",
-          "mars",
-          "avril",
-          "mai",
-          "juin",
-          "juillet",
-          "août",
-          "septembre",
-          "octobre",
-          "novembre",
-          "décembre",
-        ];
-        const jourNom = jours[dateObj.getDay()];
-        const dateFormatee = `${jourNom} ${dateObj.getDate()} ${mois[dateObj.getMonth()]}`;
-        
+        const jourNom = JOURS_FR.FULL[dateObj.getDay()];
+        const dateFormatee = `${jourNom} ${dateObj.getDate()} ${MOIS_FR.FULL[dateObj.getMonth()]}`;
+
         // Déterminer si c'est demain, aujourd'hui ou une autre date
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         const reservationDate = new Date(args.date);
         reservationDate.setHours(0, 0, 0, 0);
         const diffDays = Math.round((reservationDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-        
+
         let dateReference = dateFormatee;
         if (diffDays === 0) {
           dateReference = "aujourd'hui";
         } else if (diffDays === 1) {
           dateReference = "demain";
         }
-        
+
         return {
           success: false,
           has_existing_reservation: true,
@@ -372,6 +305,7 @@ export async function handleCreateReservation(args: CreateReservationArgs) {
       "📝 Availability check result:",
       JSON.stringify(availability, null, 2)
     );
+
 
     if (!availability.available) {
       console.log("❌ Not available:", availability.reason);
@@ -458,6 +392,7 @@ export async function handleCreateReservation(args: CreateReservationArgs) {
       .select()
       .single();
 
+
     if (error) {
       console.error("❌ Database error:", error);
       return {
@@ -470,7 +405,7 @@ export async function handleCreateReservation(args: CreateReservationArgs) {
     console.log("✅ Reservation created successfully:", reservation.id);
 
     // 6. Envoyer SMS de confirmation si activé
-    if (restaurant?.sms_enabled) {
+    if (restaurant?.sms_enabled && args.customer_phone) {
       console.log("📱 Sending confirmation SMS...");
       try {
         await sendConfirmationSMS({
@@ -487,37 +422,33 @@ export async function handleCreateReservation(args: CreateReservationArgs) {
         console.error("⚠️ SMS sending failed:", smsError);
         // Ne pas bloquer la réservation si le SMS échoue
       }
+    } else if (restaurant?.sms_enabled && !args.customer_phone) {
+      console.log("⚠️ SMS enabled but no phone number available - skipping SMS");
     }
 
     // Format de date en français pour le message
     const dateObj = new Date(args.date);
-    const jours = [
-      "dimanche",
-      "lundi",
-      "mardi",
-      "mercredi",
-      "jeudi",
-      "vendredi",
-      "samedi",
-    ];
-    const jourNom = jours[dateObj.getDay()];
+    const jourNom = JOURS_FR.FULL[dateObj.getDay()];
 
     let confirmationMessage = `Parfait ! Votre réservation est confirmée pour ${args.number_of_guests} ${args.number_of_guests === 1 ? "personne" : "personnes"} le ${jourNom} ${args.date} à ${args.time}.`;
 
-    if (restaurant?.sms_enabled) {
+    if (restaurant?.sms_enabled && args.customer_phone) {
       confirmationMessage +=
         " Vous allez recevoir un SMS de confirmation avec un lien pour annuler si besoin.";
     }
 
     confirmationMessage += " À bientôt !";
 
-    return {
+    const finalResult = {
       success: true,
       message: confirmationMessage,
       reservation_id: reservation.id,
       confidence_score: confidenceScore,
       needs_confirmation: needsConfirmation,
     };
+
+
+    return finalResult;
   } catch (error) {
     console.error("❌ Error creating reservation:", error);
     return {

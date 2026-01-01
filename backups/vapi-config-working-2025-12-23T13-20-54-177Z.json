@@ -1,0 +1,206 @@
+{
+  "id": "b31a622f-68c6-4eaf-a6ce-58a14ddcad23",
+  "orgId": "f3e69001-fc0f-4c25-b565-086a53f0a0f1",
+  "name": "Assistant épicurie v2",
+  "voice": {
+    "model": "tts-1",
+    "voiceId": "alloy",
+    "provider": "openai"
+  },
+  "createdAt": "2025-12-18T19:47:49.374Z",
+  "updatedAt": "2025-12-23T13:18:53.011Z",
+  "model": {
+    "model": "gpt-4o-mini",
+    "messages": [
+      {
+        "role": "system",
+        "content": "Tu es l'hôte/hôtesse du restaurant épicurie. Tu es chaleureux(se), professionnel(le) et naturel(le).\n\n# ⛔ RÈGLE OBLIGATOIRE - APPELER LES OUTILS\n\n## INTERDICTIONS\n- JAMAIS parler de disponibilité sans appeler check_availability\n- JAMAIS confirmer une réservation sans appeler create_reservation  \n- JAMAIS inventer \"complet\", \"fermé\", ou \"disponible\" - utilise TOUJOURS l'outil\n\n## OBLIGATIONS\n- TOUJOURS appeler check_availability avant de parler de disponibilité\n- TOUJOURS lire et transmettre fidèlement le résultat de l'outil\n- Si l'outil dit \"fermé\" → dis \"nous sommes fermés\"\n- Si l'outil dit \"complet\" → dis \"nous sommes complets\"\n\n# DATE ET HEURE\nNous sommes le : {{ \"now\" | date: \"%A %d %B %Y à %H:%M\", \"Europe/Paris\" }}\nAnnée : 2025\n\n# TON RÔLE  \nPrendre des réservations par téléphone. Obtenir :\n- Date (→ format YYYY-MM-DD)\n- Heure (→ format HH:mm)\n- Nombre de personnes\n- Nom du client\n- Téléphone\n\n# 📱 RÈGLE CRITIQUE - NUMÉRO DE TÉLÉPHONE\n\nQuand le client donne son numéro de téléphone :\n1. ÉCOUTE attentivement TOUS les chiffres\n2. RÉPÈTE le numéro EN ENTIER chiffre par chiffre pour confirmation\n3. ATTENDS la confirmation du client AVANT de créer la réservation\n\nExemple correct :\n- Client : \"Mon numéro c'est le 07 81 82 73 38\"\n- Toi : \"Je répète pour être sûr : 0-7-8-1-8-2-7-3-3-8. C'est bien ça ?\"\n- Client : \"Oui c'est ça\"\n- Toi : [Maintenant tu peux appeler create_reservation]\n\nSi le client dit \"non\" ou corrige :\n- Demande-lui de répéter le numéro\n- Répète à nouveau pour confirmation\n\n# FLOW\n\n1. **Accueil** : \"Bonjour ! Restaurant épicurie, je vous écoute.\"\n\n2. **Collecter** : date, heure, nombre de personnes\n\n3. **Vérifier (OBLIGATOIRE)** : Appeler check_availability → attendre résultat → répondre selon résultat\n\n4. **Finaliser** : Si disponible, demander nom/tel → CONFIRMER LE NUMÉRO → appeler create_reservation\n\n# CONVERSIONS\n- \"ce soir\" / \"aujourd'hui\" → date du jour\n- \"demain\" → date + 1 jour  \n- \"19h\" / \"dix-neuf heures\" → \"19:00\"\n- \"21h\" / \"vingt-et-une heures\" → \"21:00\"\n- \"midi\" → \"12:00\"\n\n# STYLE\n- Naturel, pas robotique\n- Une question à la fois\n- \"Parfait !\", \"Super !\", \"Pas de souci !\"\n\n🚨 RAPPEL : TOUJOURS CONFIRMER LE NUMÉRO DE TÉLÉPHONE AVANT DE CRÉER LA RÉSERVATION 🚨"
+      }
+    ],
+    "provider": "openai",
+    "functions": [
+      {
+        "name": "check_availability",
+        "async": false,
+        "parameters": {
+          "type": "object",
+          "required": [
+            "date",
+            "time",
+            "number_of_guests"
+          ],
+          "properties": {
+            "date": {
+              "type": "string",
+              "description": "Date au format YYYY-MM-DD (année 2025)"
+            },
+            "time": {
+              "type": "string",
+              "description": "Heure au format HH:mm (ex: 19:30, 21:00)"
+            },
+            "number_of_guests": {
+              "type": "number",
+              "description": "Nombre de personnes"
+            }
+          }
+        },
+        "description": "OBLIGATOIRE - Vérifie la disponibilité. À appeler AVANT de parler de disponibilité."
+      },
+      {
+        "name": "create_reservation",
+        "async": false,
+        "parameters": {
+          "type": "object",
+          "required": [
+            "customer_name",
+            "customer_phone",
+            "date",
+            "time",
+            "number_of_guests"
+          ],
+          "properties": {
+            "date": {
+              "type": "string",
+              "description": "Date YYYY-MM-DD"
+            },
+            "time": {
+              "type": "string",
+              "description": "Heure HH:mm"
+            },
+            "customer_name": {
+              "type": "string",
+              "description": "Nom complet du client"
+            },
+            "customer_email": {
+              "type": "string",
+              "description": "Email (optionnel)"
+            },
+            "customer_phone": {
+              "type": "string",
+              "description": "Numéro de téléphone"
+            },
+            "number_of_guests": {
+              "type": "number",
+              "description": "Nombre de personnes"
+            },
+            "special_requests": {
+              "type": "string",
+              "description": "Demandes spéciales (allergies, anniversaire, etc.)"
+            }
+          }
+        },
+        "description": "OBLIGATOIRE - Crée la réservation. À appeler UNIQUEMENT après check_availability positif."
+      },
+      {
+        "name": "find_and_cancel_reservation",
+        "async": false,
+        "parameters": {
+          "type": "object",
+          "required": [
+            "customer_name"
+          ],
+          "properties": {
+            "customer_name": {
+              "type": "string",
+              "description": "Nom du client"
+            },
+            "customer_phone": {
+              "type": "string",
+              "description": "Téléphone (optionnel, aide à trouver)"
+            }
+          }
+        },
+        "description": "Recherche et annule une réservation par le nom du client."
+      },
+      {
+        "name": "find_and_update_reservation",
+        "async": false,
+        "parameters": {
+          "type": "object",
+          "required": [
+            "customer_name"
+          ],
+          "properties": {
+            "new_date": {
+              "type": "string",
+              "description": "Nouvelle date YYYY-MM-DD (si changement)"
+            },
+            "new_time": {
+              "type": "string",
+              "description": "Nouvelle heure HH:mm (si changement)"
+            },
+            "customer_name": {
+              "type": "string",
+              "description": "Nom du client"
+            },
+            "new_number_of_guests": {
+              "type": "number",
+              "description": "Nouveau nombre de personnes (si changement)"
+            }
+          }
+        },
+        "description": "Recherche et modifie une réservation par le nom du client."
+      }
+    ],
+    "maxTokens": 400,
+    "temperature": 0.7
+  },
+  "firstMessage": "Bonjour ! Restaurant épicurie, je vous écoute.",
+  "transcriber": {
+    "model": "nova-2",
+    "keywords": [
+      "zéro:2",
+      "un:2",
+      "deux:2",
+      "trois:2",
+      "quatre:2",
+      "cinq:2",
+      "six:2",
+      "sept:2",
+      "huit:2",
+      "neuf:2",
+      "dix:2",
+      "onze:2",
+      "douze:2",
+      "treize:2",
+      "quatorze:2",
+      "quinze:2",
+      "seize:2",
+      "vingt:2",
+      "trente:2",
+      "quarante:2",
+      "cinquante:2",
+      "soixante:2",
+      "épicurie",
+      "réservation"
+    ],
+    "language": "fr",
+    "provider": "deepgram",
+    "endpointing": 500,
+    "smartFormat": true
+  },
+  "serverMessages": [
+    "conversation-update",
+    "end-of-call-report",
+    "function-call",
+    "hang",
+    "model-output",
+    "phone-call-control",
+    "speech-update",
+    "status-update",
+    "transcript",
+    "tool-calls",
+    "transfer-destination-request",
+    "user-interrupted"
+  ],
+  "serverUrl": "https://uncontestablely-cushionless-linnea.ngrok-free.dev/api/webhooks/vapi",
+  "metadata": {
+    "restaurant_id": "fd796afe-61aa-42e3-b2f4-4438a258638b"
+  },
+  "backgroundSound": "office",
+  "server": {
+    "url": "https://uncontestablely-cushionless-linnea.ngrok-free.dev/api/webhooks/vapi",
+    "timeoutSeconds": 20
+  },
+  "isServerUrlSecretSet": false
+}

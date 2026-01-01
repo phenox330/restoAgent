@@ -8,8 +8,9 @@
  * - Server URL
  * - Metadata
  * 
- * Usage: 
+ * Usage:
  *   npx tsx scripts/update-vapi-config.ts              # Utilise l'URL par défaut (production)
+ *   npx tsx scripts/update-vapi-config.ts --test       # Utilise l'URL de test (preview deployment)
  *   npx tsx scripts/update-vapi-config.ts --staging    # Utilise l'URL de staging
  *   npx tsx scripts/update-vapi-config.ts --production # Utilise l'URL de production
  * 
@@ -28,6 +29,7 @@ config({ path: resolve(process.cwd(), ".env.local") });
 const args = process.argv.slice(2);
 const isStaging = args.includes("--staging");
 const isProduction = args.includes("--production");
+const isTest = args.includes("--test");
 
 // ============================================================
 // CONFIGURATION
@@ -40,10 +42,14 @@ const RESTAURANT_ID = "fd796afe-61aa-42e3-b2f4-4438a258638b";
 // URLs des environnements
 const PRODUCTION_URL = "https://y-lemon-ten.vercel.app/api/webhooks/vapi";
 const STAGING_URL = "https://y-git-staging-hello-1894s-projects.vercel.app/api/webhooks/vapi"; // URL Vercel staging
+const TEST_URL = "https://y-git-test-appel-vapi-hello-1894s-projects.vercel.app/api/webhooks/vapi"; // URL Vercel test
 
 // Sélection de l'URL selon l'environnement
 let SERVER_URL: string;
-if (isStaging) {
+if (isTest) {
+  SERVER_URL = TEST_URL;
+  console.log("🧪 Mode TEST sélectionné");
+} else if (isStaging) {
   SERVER_URL = STAGING_URL;
   console.log("🔶 Mode STAGING sélectionné");
 } else if (isProduction) {
@@ -76,32 +82,16 @@ const SYSTEM_PROMPT = `Tu es l'hôte/hôtesse du restaurant épicurie. Tu es cha
 
 # DATE ET HEURE
 Nous sommes le : {{ "now" | date: "%A %d %B %Y à %H:%M", "Europe/Paris" }}
-Année : 2025
+Année : 2026
 
-# TON RÔLE  
+# TON RÔLE
 Prendre des réservations par téléphone. Obtenir :
 - Date (→ format YYYY-MM-DD)
 - Heure (→ format HH:mm)
 - Nombre de personnes
 - Nom du client
-- Téléphone
 
-# 📱 RÈGLE CRITIQUE - NUMÉRO DE TÉLÉPHONE
-
-Quand le client donne son numéro de téléphone :
-1. ÉCOUTE attentivement TOUS les chiffres
-2. RÉPÈTE le numéro EN ENTIER chiffre par chiffre pour confirmation
-3. ATTENDS la confirmation du client AVANT de créer la réservation
-
-Exemple correct :
-- Client : "Mon numéro c'est le 07 81 82 73 38"
-- Toi : "Je répète pour être sûr : 0-7-8-1-8-2-7-3-3-8. C'est bien ça ?"
-- Client : "Oui c'est ça"
-- Toi : [Maintenant tu peux appeler create_reservation]
-
-Si le client dit "non" ou corrige :
-- Demande-lui de répéter le numéro
-- Répète à nouveau pour confirmation
+Note : Le numéro de téléphone est automatiquement récupéré depuis l'appel, pas besoin de le demander.
 
 # FLOW
 
@@ -111,7 +101,7 @@ Si le client dit "non" ou corrige :
 
 3. **Vérifier (OBLIGATOIRE)** : Appeler check_availability → attendre résultat → répondre selon résultat
 
-4. **Finaliser** : Si disponible, demander nom/tel → CONFIRMER LE NUMÉRO → appeler create_reservation
+4. **Finaliser** : Si disponible, demander le nom → appeler create_reservation
 
 # CONVERSIONS
 - "ce soir" / "aujourd'hui" → date du jour
@@ -123,9 +113,7 @@ Si le client dit "non" ou corrige :
 # STYLE
 - Naturel, pas robotique
 - Une question à la fois
-- "Parfait !", "Super !", "Pas de souci !"
-
-🚨 RAPPEL : TOUJOURS CONFIRMER LE NUMÉRO DE TÉLÉPHONE AVANT DE CRÉER LA RÉSERVATION 🚨`;
+- "Parfait !", "Super !", "Pas de souci !"`;
 
 // ============================================================
 // FONCTIONS (TOOLS)
@@ -142,7 +130,7 @@ const FUNCTIONS = [
       properties: {
         date: {
           type: "string",
-          description: "Date au format YYYY-MM-DD (année 2025)"
+          description: "Date au format YYYY-MM-DD (année 2026)"
         },
         time: {
           type: "string",
@@ -161,7 +149,7 @@ const FUNCTIONS = [
     description: "OBLIGATOIRE - Crée la réservation. À appeler UNIQUEMENT après check_availability positif.",
     parameters: {
       type: "object",
-      required: ["customer_name", "customer_phone", "date", "time", "number_of_guests"],
+      required: ["customer_name", "date", "time", "number_of_guests"],
       properties: {
         date: {
           type: "string",
@@ -181,7 +169,7 @@ const FUNCTIONS = [
         },
         customer_phone: {
           type: "string",
-          description: "Numéro de téléphone"
+          description: "Numéro de téléphone (optionnel - récupéré automatiquement depuis l'appel)"
         },
         number_of_guests: {
           type: "number",
