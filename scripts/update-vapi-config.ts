@@ -82,7 +82,7 @@ const SYSTEM_PROMPT = `Tu es l'hôte/hôtesse du restaurant épicurie. Tu es cha
 
 # DATE ET HEURE
 Nous sommes le : {{ "now" | date: "%A %d %B %Y à %H:%M", "Europe/Paris" }}
-Année : 2026
+Année : {{ "now" | date: "%Y", "Europe/Paris" }}
 
 # TON RÔLE
 Prendre des réservations par téléphone. Obtenir :
@@ -130,7 +130,7 @@ const FUNCTIONS = [
       properties: {
         date: {
           type: "string",
-          description: "Date au format YYYY-MM-DD (année 2026)"
+          description: "Date au format YYYY-MM-DD"
         },
         time: {
           type: "string",
@@ -241,12 +241,13 @@ const TRANSCRIBER = {
   endpointing: 500,
   smartFormat: true,
   keywords: [
-    // Chiffres français avec boost pour meilleure reconnaissance
+    // Chiffres français avec boost pour meilleure reconnaissance (numéros de téléphone)
     "zéro:2", "un:2", "deux:2", "trois:2", "quatre:2",
     "cinq:2", "six:2", "sept:2", "huit:2", "neuf:2",
     "dix:2", "onze:2", "douze:2", "treize:2", "quatorze:2",
     "quinze:2", "seize:2", "vingt:2", "trente:2", "quarante:2",
-    "cinquante:2", "soixante:2",
+    "cinquante:2", "soixante:2", "soixantedix:2",
+    "quatrevingt:2", "quatrevingdix:2", "cent:2",
     // Mots du domaine
     "épicurie", "réservation"
   ]
@@ -305,13 +306,12 @@ async function updateVapiConfig() {
       temperature: 0.7
     },
     voice: {
-      model: "tts-1",
-      voiceId: "alloy",
-      provider: "openai"
+      provider: "11labs",
+      voiceId: "lvQdCgwZfBuOzxyV5pxu",
+      model: "eleven_turbo_v2_5"
     },
     firstMessage: "Bonjour ! Restaurant épicurie, je vous écoute.",
     transcriber: TRANSCRIBER,
-    serverUrl: SERVER_URL,
     serverMessages: SERVER_MESSAGES,
     server: {
       url: SERVER_URL,
