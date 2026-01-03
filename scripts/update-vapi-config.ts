@@ -246,8 +246,8 @@ const TRANSCRIBER = {
     "cinq:2", "six:2", "sept:2", "huit:2", "neuf:2",
     "dix:2", "onze:2", "douze:2", "treize:2", "quatorze:2",
     "quinze:2", "seize:2", "vingt:2", "trente:2", "quarante:2",
-    "cinquante:2", "soixante:2", "soixante-dix:2",
-    "quatre-vingt:2", "quatre-vingt-dix:2", "cent:2",
+    "cinquante:2", "soixante:2", "soixantedix:2",
+    "quatrevingt:2", "quatrevingdix:2", "cent:2",
     // Mots du domaine
     "épicurie", "réservation"
   ]
