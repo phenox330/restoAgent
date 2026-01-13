@@ -582,10 +582,29 @@ export async function handleCancelReservation(args: CancelReservationArgs) {
 export async function handleFindAndCancelReservation(
   args: FindAndCancelReservationArgs
 ) {
-  console.log(
-    "🔍 find_and_cancel_reservation called with:",
-    JSON.stringify(args, null, 2)
-  );
+  console.log("========================================");
+  console.log("🔍 find_and_cancel_reservation called");
+  console.log("  Args received:", JSON.stringify(args, null, 2));
+  console.log("  customer_name:", args.customer_name, "(type:", typeof args.customer_name, ")");
+  console.log("  customer_phone:", args.customer_phone, "(type:", typeof args.customer_phone, ")");
+  console.log("  restaurant_id:", args.restaurant_id, "(type:", typeof args.restaurant_id, ")");
+
+  // Vérification immédiate des args critiques
+  if (!args.restaurant_id) {
+    console.error("❌ CRITICAL: restaurant_id is missing!");
+    return {
+      success: false,
+      message: "Erreur système: impossible d'identifier le restaurant. Veuillez réessayer.",
+    };
+  }
+
+  if (!args.customer_phone && !args.customer_name) {
+    console.log("⚠️ No customer_phone AND no customer_name provided");
+    return {
+      success: false,
+      message: "J'ai besoin soit de votre nom, soit du numéro de téléphone utilisé pour la réservation.",
+    };
+  }
 
   try {
     // Si on a SEULEMENT le téléphone (pas de nom), recherche directe
@@ -772,15 +791,20 @@ export async function handleFindAndCancelReservation(
         success: true,
         message: `Réservation annulée avec succès. Il s'agissait de la réservation pour ${reservation.number_of_guests} personne${reservation.number_of_guests > 1 ? "s" : ""} le ${dateStr} à ${reservation.reservation_time}.`,
       };
-    } else {
-      // Ni nom ni téléphone fourni
-      return {
-        success: false,
-        message: "J'ai besoin soit de votre nom, soit du numéro de téléphone utilisé pour la réservation.",
-      };
     }
+
+    // Si on arrive ici, c'est qu'on n'a pas trouvé de réservation (ne devrait jamais arriver)
+    console.log("⚠️ Reached end of function without finding/cancelling reservation");
+    return {
+      success: false,
+      message: "Aucune réservation trouvée.",
+    };
   } catch (error) {
-    console.error("❌ Error in find_and_cancel_reservation:", error);
+    console.error("❌ EXCEPTION in find_and_cancel_reservation");
+    console.error("  Error:", error);
+    console.error("  Error message:", error instanceof Error ? error.message : String(error));
+    console.error("  Error stack:", error instanceof Error ? error.stack : "N/A");
+    console.error("  Args at time of error:", JSON.stringify(args, null, 2));
     return {
       success: false,
       message: "Une erreur est survenue lors de la recherche et l'annulation",
@@ -790,6 +814,16 @@ export async function handleFindAndCancelReservation(
 
 // Fallback pour la recherche classique (si pg_trgm n'est pas disponible)
 async function fallbackFindAndCancel(args: FindAndCancelReservationArgs) {
+  console.log("📋 [FALLBACK] Fallback cancellation called");
+
+  if (!args.customer_name) {
+    console.log("⚠️ [FALLBACK] No customer_name provided for fallback");
+    return {
+      success: false,
+      message: "J'ai besoin du nom du client pour rechercher la réservation.",
+    };
+  }
+
   const searchTerms = args.customer_name.trim().split(/\s+/);
 
   let query = getSupabaseAdmin()
