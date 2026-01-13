@@ -319,6 +319,7 @@ async function updateVapiConfig() {
     firstMessage: "Bonjour ! Restaurant épicurie, je vous écoute.",
     transcriber: TRANSCRIBER,
     serverMessages: SERVER_MESSAGES,
+    serverUrl: SERVER_URL, // Champ racine utilisé par Vapi
     server: {
       url: SERVER_URL,
       timeoutSeconds: 20
