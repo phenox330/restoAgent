@@ -192,6 +192,25 @@ Agent must pause after collecting date/time/party size to explicitly confirm det
   - /Users/phenox/Developer/restoagent/lib/vapi/tools.ts (handleFindAndCancelReservation)
   - /Users/phenox/Developer/restoagent/scripts/update-vapi-config.ts (SYSTEM_PROMPT + function def)
 
+**Issue #6 - Politesse and Cancellation Debugging (2026-01-13 17:15)**
+- **Problem 1:** Agent says "ok Gombert" instead of "ok monsieur Gombert" in conversation
+- **Problem 2:** Cancellation fails with "Une erreur est survenue..." - no detailed logs
+- **User Feedback:**
+  - "Quand je dis monsieur Gombert, toujours dire monsieur Gombert mais enregistrer Gombert dans la base de données"
+  - "Je voudrais annuler une réservation - elle a dit qu'il y avait un problème technique"
+- **Solution:**
+  - **Politesse:** Added "RÈGLE IMPORTANTE - POLITESSE ET NOM" section to SYSTEM_PROMPT
+    - In conversation: Use "monsieur X", "madame X" for politeness
+    - In tools: Pass only surname "X" without title
+    - Clear examples provided for different scenarios
+  - **Debugging:** Enhanced cancellation function logging
+    - Added detailed entry logging with arg types
+    - Added explicit checks for missing restaurant_id/customer_phone with early returns
+    - Added exception logging with stack traces
+    - Fixed fallbackFindAndCancel to handle missing customer_name
+- **Status:** Deployed to PRODUCTION - waiting for test call with new logs
+- **Commit:** 88ccf70
+
 **Completion Notes:**
 
 **Implementation Approach:**
