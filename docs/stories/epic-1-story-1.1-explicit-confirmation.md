@@ -145,6 +145,19 @@ Agent must pause after collecting date/time/party size to explicitly confirm det
   - No config redeployment needed when hours change
   - Cleaner customer names in reservations table
 
+**Issue #4 - Test Feedback Round 2 (2026-01-13 11:15)**
+- **Problem 1:** Agent re-asks for name after confirmation (forgets previous context)
+- **Problem 2:** Cancellation appears to succeed but reservation remains in database
+- **Solution:**
+  - Fixed FLOW: Name now collected in step 2 BEFORE confirmation - commit 9812ab7
+  - Updated confirmation template to include name: "...au nom de {{nom}}, c'est bien ça?"
+  - Step 5 no longer asks for name (already has it)
+  - Enhanced cancellation logging to debug database update issue
+- **Status:**
+  - Name flow: Resolved - deployed to PRODUCTION
+  - Cancellation: Enhanced logging deployed - awaiting test with Vercel logs monitoring
+- **Next:** User needs to test cancellation while monitoring logs at vercel.com/logs
+
 **Completion Notes:**
 
 **Implementation Approach:**
