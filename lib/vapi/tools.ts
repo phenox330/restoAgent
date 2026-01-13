@@ -97,7 +97,92 @@ function calculateConfidenceScore(args: CreateReservationArgs): number {
   return Math.min(score, 1);
 }
 
-// Tool 0: Obtenir la date actuelle
+// Tool 0: Obtenir les informations du restaurant (horaires, etc.)
+interface GetRestaurantInfoArgs {
+  restaurant_id: string;
+}
+
+export async function handleGetRestaurantInfo(args: GetRestaurantInfoArgs) {
+  console.log("🏪 get_restaurant_info called with:", JSON.stringify(args, null, 2));
+
+  try {
+    const { data: restaurant, error } = await getSupabaseAdmin()
+      .from("restaurants")
+      .select("name, phone, address, opening_hours, closed_dates")
+      .eq("id", args.restaurant_id)
+      .single();
+
+    if (error || !restaurant) {
+      console.error("❌ Restaurant not found:", error);
+      return {
+        success: false,
+        message: "Désolé, je n'ai pas pu récupérer les informations du restaurant.",
+      };
+    }
+
+    console.log("✅ Restaurant info found:", restaurant.name);
+
+    // Formatter les horaires en texte lisible
+    const openingHours = restaurant.opening_hours as any;
+    let hoursText = "";
+
+    const daysMap: { [key: string]: string } = {
+      monday: "Lundi",
+      tuesday: "Mardi",
+      wednesday: "Mercredi",
+      thursday: "Jeudi",
+      friday: "Vendredi",
+      saturday: "Samedi",
+      sunday: "Dimanche",
+    };
+
+    for (const [day, hours] of Object.entries(openingHours)) {
+      const dayName = daysMap[day] || day;
+      if (hours && typeof hours === "object") {
+        const dayHours = hours as any;
+        const services = [];
+
+        if (dayHours.lunch) {
+          services.push(
+            `déjeuner ${dayHours.lunch.start}-${dayHours.lunch.end}`
+          );
+        }
+        if (dayHours.dinner) {
+          services.push(`dîner ${dayHours.dinner.start}-${dayHours.dinner.end}`);
+        }
+
+        if (services.length > 0) {
+          hoursText += `${dayName}: ${services.join(" et ")}. `;
+        } else {
+          hoursText += `${dayName}: fermé. `;
+        }
+      } else {
+        hoursText += `${dayName}: fermé. `;
+      }
+    }
+
+    const result = {
+      success: true,
+      message: `Voici nos horaires d'ouverture : ${hoursText.trim()}`,
+      restaurant_name: restaurant.name,
+      phone: restaurant.phone,
+      address: restaurant.address,
+      opening_hours: hoursText.trim(),
+      closed_dates: restaurant.closed_dates,
+    };
+
+    console.log("🏪 get_restaurant_info result:", JSON.stringify(result, null, 2));
+    return result;
+  } catch (error) {
+    console.error("❌ Error fetching restaurant info:", error);
+    return {
+      success: false,
+      message: "Désolé, une erreur est survenue en récupérant les informations.",
+    };
+  }
+}
+
+// Tool 1: Obtenir la date actuelle
 export async function handleGetCurrentDate() {
   console.log("📅 get_current_date called");
 
@@ -900,6 +985,8 @@ export async function handleTransfer(args: TransferCallArgs) {
 // Router pour gérer les appels de fonctions
 export async function handleToolCall(toolName: string, args: any) {
   switch (toolName) {
+    case "get_restaurant_info":
+      return handleGetRestaurantInfo(args);
     case "get_current_date":
       return handleGetCurrentDate();
     case "check_availability":

@@ -89,9 +89,14 @@ Prendre des réservations par téléphone. Obtenir :
 - Date (→ format YYYY-MM-DD)
 - Heure (→ format HH:mm)
 - Nombre de personnes
-- Nom du client
+- Nom du client (IMPORTANT : retirer "monsieur", "madame", "mademoiselle" - garder uniquement le nom de famille)
 
 Note : Le numéro de téléphone est automatiquement récupéré depuis l'appel, pas besoin de le demander.
+
+# HORAIRES ET INFORMATIONS
+Si le client demande les horaires d'ouverture, l'adresse, ou d'autres informations pratiques :
+- Appeler get_restaurant_info
+- Lire et transmettre fidèlement le résultat
 
 # FLOW
 
@@ -127,6 +132,16 @@ Note : Le numéro de téléphone est automatiquement récupéré depuis l'appel,
 // ============================================================
 
 const FUNCTIONS = [
+  {
+    name: "get_restaurant_info",
+    async: false,
+    description: "Récupère les informations du restaurant (horaires d'ouverture, adresse, téléphone). À appeler quand le client demande les horaires ou informations pratiques.",
+    parameters: {
+      type: "object",
+      required: [],
+      properties: {}
+    }
+  },
   {
     name: "check_availability",
     async: false,
