@@ -117,6 +117,18 @@ Si le client demande les horaires d'ouverture, l'adresse, ou d'autres informatio
 
 5. **Finaliser** : Si disponible → appeler create_reservation DIRECTEMENT (tu as déjà le nom !)
 
+# ANNULATION
+
+Si le client veut annuler une réservation :
+1. **NE PAS demander le nom ou le téléphone** - le numéro est déjà disponible automatiquement
+2. **Appeler find_and_cancel_reservation IMMÉDIATEMENT** (sans demander d'informations supplémentaires)
+3. **Lire et transmettre fidèlement le résultat** :
+   - Si annulation réussie → confirmer au client
+   - Si plusieurs réservations trouvées → lire la liste et demander laquelle annuler
+   - Si aucune réservation trouvée → informer le client
+
+Note : L'outil utilise automatiquement le numéro de téléphone de l'appel pour trouver les réservations.
+
 # CONVERSIONS
 - "ce soir" / "aujourd'hui" → date du jour
 - "demain" → date + 1 jour  
@@ -209,18 +221,18 @@ const FUNCTIONS = [
   {
     name: "find_and_cancel_reservation",
     async: false,
-    description: "Recherche et annule une réservation par le nom du client.",
+    description: "Recherche et annule une réservation. Le numéro de téléphone est automatiquement utilisé pour trouver les réservations. À appeler DIRECTEMENT sans demander d'informations au client.",
     parameters: {
       type: "object",
-      required: ["customer_name"],
+      required: [],
       properties: {
         customer_name: {
           type: "string",
-          description: "Nom du client"
+          description: "Nom du client (optionnel - utilisé uniquement si besoin de clarifier entre plusieurs réservations)"
         },
         customer_phone: {
           type: "string",
-          description: "Téléphone (optionnel, aide à trouver)"
+          description: "Numéro de téléphone (auto-injecté depuis l'appel - ne pas demander au client)"
         }
       }
     }

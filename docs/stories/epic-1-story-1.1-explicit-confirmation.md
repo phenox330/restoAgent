@@ -158,6 +158,40 @@ Agent must pause after collecting date/time/party size to explicitly confirm det
   - Cancellation: Enhanced logging deployed - awaiting test with Vercel logs monitoring
 - **Next:** User needs to test cancellation while monitoring logs at vercel.com/logs
 
+**Issue #5 - Cancellation Flow Redesign (2026-01-13 11:30)**
+- **Problem 1:** Agent never called find_and_cancel_reservation (logs showed no function call)
+- **Problem 2:** Agent asked for name and phone, but these are redundant - phone is auto-captured from call
+- **User Feedback:** "Puisque le numéro de téléphone qui est enregistré au moment de l'appel est déjà lié à un nom s'il existe, pourquoi redemander le nom de famille ?"
+- **User's Desired Flow:**
+  1. Client: "Je voudrais annuler"
+  2. Agent: Auto-searches by phone, announces reservation found
+  3. Agent: "Vous confirmez l'annulation ?"
+  4. Client: "Oui"
+  5. Agent: Cancels and confirms
+- **Root Causes:**
+  - SYSTEM_PROMPT didn't explain cancellation flow to agent
+  - Function required customer_name as parameter
+  - UX design flaw: asking for info already available
+- **Solution:**
+  - Redesigned handleFindAndCancelReservation in lib/vapi/tools.ts:
+    - Made customer_name optional (not required)
+    - Phone-first search: uses auto-captured phone number
+    - If 1 reservation found → cancel immediately and return success message
+    - If multiple reservations → list them and ask which one
+    - If no reservation → inform user
+  - Added ANNULATION section to SYSTEM_PROMPT:
+    - Instructs agent NOT to ask for name/phone
+    - Call find_and_cancel_reservation IMMEDIATELY
+    - Phone is auto-injected via webhook
+  - Updated find_and_cancel_reservation function description:
+    - Changed required: [] (no required params)
+    - Description emphasizes phone is automatic
+    - "À appeler DIRECTEMENT sans demander d'informations"
+- **Status:** Deployed to PRODUCTION - ready for testing
+- **Files Modified:**
+  - /Users/phenox/Developer/restoagent/lib/vapi/tools.ts (handleFindAndCancelReservation)
+  - /Users/phenox/Developer/restoagent/scripts/update-vapi-config.ts (SYSTEM_PROMPT + function def)
+
 **Completion Notes:**
 
 **Implementation Approach:**

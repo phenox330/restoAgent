@@ -38,7 +38,7 @@ interface CancelReservationArgs {
 
 interface FindAndCancelReservationArgs {
   restaurant_id: string;
-  customer_name: string;
+  customer_name?: string; // Optionnel - peut chercher uniquement par téléphone
   customer_phone?: string;
 }
 
@@ -578,7 +578,7 @@ export async function handleCancelReservation(args: CancelReservationArgs) {
   }
 }
 
-// Tool 4: Rechercher et annuler une réservation par nom (avec recherche phonétique)
+// Tool 4: Rechercher et annuler une réservation par téléphone ou nom
 export async function handleFindAndCancelReservation(
   args: FindAndCancelReservationArgs
 ) {
@@ -588,99 +588,197 @@ export async function handleFindAndCancelReservation(
   );
 
   try {
-    // Utiliser la recherche phonétique avec pg_trgm
-    const { data: reservations, error: searchError } = await getSupabaseAdmin().rpc(
-      "fuzzy_search_reservations",
-      {
-        p_restaurant_id: args.restaurant_id,
-        p_name: args.customer_name,
-        p_phone: args.customer_phone || null,
-        p_min_similarity: 0.3,
+    // Si on a SEULEMENT le téléphone (pas de nom), recherche directe
+    if (!args.customer_name && args.customer_phone) {
+      console.log("📞 Direct phone search:", args.customer_phone);
+
+      const { data: reservations, error: searchError } = await getSupabaseAdmin()
+        .from("reservations")
+        .select("*")
+        .eq("restaurant_id", args.restaurant_id)
+        .eq("customer_phone", args.customer_phone)
+        .in("status", ["pending", "confirmed"])
+        .order("reservation_date", { ascending: true })
+        .order("reservation_time", { ascending: true });
+
+      if (searchError) {
+        console.error("❌ Phone search error:", searchError);
+        return {
+          success: false,
+          message: "Désolé, une erreur est survenue lors de la recherche.",
+        };
       }
-    );
 
-    if (searchError) {
-      console.error("❌ Search error:", searchError);
+      if (!reservations || reservations.length === 0) {
+        console.log("⚠️ No reservation found for phone:", args.customer_phone);
+        return {
+          success: false,
+          message: "Aucune réservation trouvée avec ce numéro de téléphone. Avez-vous peut-être réservé sous un autre nom ou numéro ?",
+        };
+      }
 
-      // Fallback à la recherche classique si la fonction n'existe pas encore
-      return await fallbackFindAndCancel(args);
-    }
+      // Si UNE seule réservation : annuler directement
+      if (reservations.length === 1) {
+        const reservation = reservations[0];
+        const reservationDate = new Date(reservation.reservation_date);
+        const dateStr = reservationDate.toLocaleDateString("fr-FR", {
+          weekday: "long",
+          day: "numeric",
+          month: "long",
+        });
 
-    if (!reservations || reservations.length === 0) {
-      console.log("⚠️ No reservation found for:", args.customer_name);
-      return {
-        success: false,
-        message: `Aucune réservation trouvée au nom de ${args.customer_name}. La réservation a peut-être déjà été annulée ou le nom ne correspond pas exactement.`,
-      };
-    }
+        // Annuler la réservation
+        console.log("🔄 Attempting to cancel reservation ID:", reservation.id);
+        console.log("   Current status:", reservation.status);
 
-    // Si plusieurs réservations avec des scores proches, demander précision
-    if (reservations.length > 1) {
-      const topScore = reservations[0].similarity_score;
-      const closeMatches = reservations.filter(
-        (r: any) => Math.abs(r.similarity_score - topScore) < 0.1
-      );
+        const { data: updateData, error: updateError } = await getSupabaseAdmin()
+          .from("reservations")
+          .update({ status: "cancelled" })
+          .eq("id", reservation.id)
+          .select();
 
-      if (closeMatches.length > 1 && !args.customer_phone) {
-        const matchNames = closeMatches
-          .map(
-            (r: any) =>
-              `${r.customer_name} (${new Date(r.reservation_date).toLocaleDateString("fr-FR")} à ${r.reservation_time})`
-          )
-          .join(", ");
+        if (updateError) {
+          console.error("❌ Database update error:", updateError);
+          return {
+            success: false,
+            message: `Erreur lors de l'annulation: ${updateError.message}`,
+          };
+        }
+
+        if (!updateData || updateData.length === 0) {
+          console.error("❌ Update returned no data - possible RLS issue");
+          return {
+            success: false,
+            message: "Impossible d'annuler la réservation. Veuillez contacter le restaurant.",
+          };
+        }
+
+        console.log("✅ Reservation cancelled successfully:", reservation.id);
+        console.log("   Updated data:", JSON.stringify(updateData[0], null, 2));
+
+        return {
+          success: true,
+          message: `Réservation annulée avec succès. Il s'agissait de la réservation pour ${reservation.number_of_guests} personne${reservation.number_of_guests > 1 ? "s" : ""} le ${dateStr} à ${reservation.reservation_time} au nom de ${reservation.customer_name}.`,
+        };
+      }
+
+      // Si PLUSIEURS réservations : lister et demander laquelle
+      if (reservations.length > 1) {
+        const list = reservations.map((r: any, idx: number) => {
+          const date = new Date(r.reservation_date);
+          const dateStr = date.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
+          return `${idx + 1}. ${dateStr} à ${r.reservation_time} pour ${r.number_of_guests} personne${r.number_of_guests > 1 ? "s" : ""}`;
+        }).join(", ");
+
         return {
           success: false,
           needs_clarification: true,
-          message: `J'ai trouvé plusieurs réservations similaires: ${matchNames}. Pouvez-vous me confirmer le numéro de téléphone pour identifier la bonne réservation ?`,
+          message: `J'ai trouvé ${reservations.length} réservations : ${list}. Laquelle souhaitez-vous annuler ?`,
         };
       }
     }
 
-    // Prendre la meilleure correspondance
-    const reservation = reservations[0];
+    // Si on a un NOM (avec ou sans téléphone), utiliser la recherche phonétique
+    if (args.customer_name) {
+      // Utiliser la recherche phonétique avec pg_trgm
+      const { data: reservations, error: searchError } = await getSupabaseAdmin().rpc(
+        "fuzzy_search_reservations",
+        {
+          p_restaurant_id: args.restaurant_id,
+          p_name: args.customer_name,
+          p_phone: args.customer_phone || null,
+          p_min_similarity: 0.3,
+        }
+      );
 
-    // Annuler la réservation trouvée
-    console.log("🔄 Attempting to cancel reservation ID:", reservation.id);
-    console.log("   Current status:", reservation.status);
+      if (searchError) {
+        console.error("❌ Search error:", searchError);
+        // Fallback à la recherche classique si la fonction n'existe pas encore
+        return await fallbackFindAndCancel(args);
+      }
 
-    const { data: updateData, error: updateError } = await getSupabaseAdmin()
-      .from("reservations")
-      .update({ status: "cancelled" })
-      .eq("id", reservation.id)
-      .select();
+      if (!reservations || reservations.length === 0) {
+        console.log("⚠️ No reservation found for:", args.customer_name);
+        return {
+          success: false,
+          message: `Aucune réservation trouvée au nom de ${args.customer_name}. La réservation a peut-être déjà été annulée ou le nom ne correspond pas exactement.`,
+        };
+      }
 
-    if (updateError) {
-      console.error("❌ Database update error:", updateError);
+      // Si plusieurs réservations avec des scores proches, demander précision
+      if (reservations.length > 1) {
+        const topScore = reservations[0].similarity_score;
+        const closeMatches = reservations.filter(
+          (r: any) => Math.abs(r.similarity_score - topScore) < 0.1
+        );
+
+        if (closeMatches.length > 1 && !args.customer_phone) {
+          const matchNames = closeMatches
+            .map(
+              (r: any) =>
+                `${r.customer_name} (${new Date(r.reservation_date).toLocaleDateString("fr-FR")} à ${r.reservation_time})`
+            )
+            .join(", ");
+          return {
+            success: false,
+            needs_clarification: true,
+            message: `J'ai trouvé plusieurs réservations similaires: ${matchNames}. Pouvez-vous me confirmer le numéro de téléphone pour identifier la bonne réservation ?`,
+          };
+        }
+      }
+
+      // Prendre la meilleure correspondance
+      const reservation = reservations[0];
+
+      // Annuler la réservation trouvée
+      console.log("🔄 Attempting to cancel reservation ID:", reservation.id);
+      console.log("   Current status:", reservation.status);
+
+      const { data: updateData, error: updateError } = await getSupabaseAdmin()
+        .from("reservations")
+        .update({ status: "cancelled" })
+        .eq("id", reservation.id)
+        .select();
+
+      if (updateError) {
+        console.error("❌ Database update error:", updateError);
+        return {
+          success: false,
+          message: `Erreur lors de l'annulation: ${updateError.message}`,
+        };
+      }
+
+      if (!updateData || updateData.length === 0) {
+        console.error("❌ Update returned no data - possible RLS issue");
+        return {
+          success: false,
+          message: "Impossible d'annuler la réservation. Veuillez contacter le restaurant.",
+        };
+      }
+
+      console.log("✅ Reservation cancelled successfully:", reservation.id);
+      console.log("   Updated data:", JSON.stringify(updateData[0], null, 2));
+
+      // Formater la date pour le message de confirmation
+      const reservationDate = new Date(reservation.reservation_date);
+      const dateStr = reservationDate.toLocaleDateString("fr-FR", {
+        weekday: "long",
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      });
+
+      return {
+        success: true,
+        message: `Réservation annulée avec succès. Il s'agissait de la réservation pour ${reservation.number_of_guests} personne${reservation.number_of_guests > 1 ? "s" : ""} le ${dateStr} à ${reservation.reservation_time}.`,
+      };
+    } else {
+      // Ni nom ni téléphone fourni
       return {
         success: false,
-        message: `Erreur lors de l'annulation: ${updateError.message}`,
+        message: "J'ai besoin soit de votre nom, soit du numéro de téléphone utilisé pour la réservation.",
       };
     }
-
-    if (!updateData || updateData.length === 0) {
-      console.error("❌ Update returned no data - possible RLS issue");
-      return {
-        success: false,
-        message: "Impossible d'annuler la réservation. Veuillez contacter le restaurant.",
-      };
-    }
-
-    console.log("✅ Reservation cancelled successfully:", reservation.id);
-    console.log("   Updated data:", JSON.stringify(updateData[0], null, 2));
-
-    // Formater la date pour le message de confirmation
-    const reservationDate = new Date(reservation.reservation_date);
-    const dateStr = reservationDate.toLocaleDateString("fr-FR", {
-      weekday: "long",
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    });
-
-    return {
-      success: true,
-      message: `Réservation annulée avec succès. Il s'agissait de la réservation pour ${reservation.number_of_guests} personne${reservation.number_of_guests > 1 ? "s" : ""} le ${dateStr} à ${reservation.reservation_time}.`,
-    };
   } catch (error) {
     console.error("❌ Error in find_and_cancel_reservation:", error);
     return {
