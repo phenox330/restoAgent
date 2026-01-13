@@ -112,13 +112,25 @@ Agent must pause after collecting date/time/party size to explicitly confirm det
 
 **Debug Log References:**
 
-**Issue #1 - Eleven Labs Pipeline Error (2026-01-13)**
+**Issue #1 - Eleven Labs Pipeline Error (2026-01-13 10:12)**
 - **Problem:** firstMessage failing with Eleven Labs voice - audio glitching/stretching syllables
 - **Error:** "pipeline-error-first-message-failed" (known Vapi/Eleven Labs issue)
 - **Root Cause:** Eleven Labs voice provider issue on certain plans or with detected unusual activity
 - **Solution:** Switched to OpenAI voice provider (alloy) - commit 204c18d
 - **Status:** Resolved - deployed to TEST environment
 - **Reference:** Vapi Discord discussions on pipeline-error-first-message-failed
+
+**Issue #2 - Restaurant Not Found in Database (2026-01-13 10:45)**
+- **Problem:** check_availability returning "Restaurant non trouvé" error
+- **Error:** Restaurant ID fd796afe-61aa-42e3-b2f4-4438a258638b not in database
+- **Root Cause:** Database empty - restaurant never created/seeded
+- **Solution:** Created seed script (scripts/seed-restaurant.ts) and executed - commit b7c45f3
+- **Status:** Resolved - restaurant created with full configuration
+- **Details:**
+  - Restaurant ID: fd796afe-61aa-42e3-b2f4-4438a258638b
+  - Hours: Mon-Sat (closed Sunday)
+  - Capacity: 40 covers
+  - SMS enabled
 
 **Completion Notes:**
 
@@ -151,11 +163,13 @@ Agent must pause after collecting date/time/party size to explicitly confirm det
 4. If all tests pass, story can be marked "Ready for Review"
 
 **File List:**
-- Modified: `/scripts/update-vapi-config.ts` (SYSTEM_PROMPT FLOW section + voice provider fix)
+- Modified: `/scripts/update-vapi-config.ts` (SYSTEM_PROMPT FLOW section + voice provider fix + serverUrl)
 - Created: `docs/stories/story-1.1-test-protocol.md` (test documentation)
 - Created: `backups/vapi-config-working-2026-01-13T10-12-36-682Z.json` (config backup)
 - Updated: `backups/vapi-config-working-LATEST.json` (latest backup)
-- Modified: `docs/stories/epic-1-story-1.1-explicit-confirmation.md` (debug log update)
+- Modified: `docs/stories/epic-1-story-1.1-explicit-confirmation.md` (debug log updates)
+- Created: `scripts/seed-restaurant.ts` (restaurant initialization script)
+- Database: Restaurant seeded with ID fd796afe-61aa-42e3-b2f4-4438a258638b
 
 **Change Log:**
 
