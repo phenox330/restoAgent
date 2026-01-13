@@ -640,20 +640,33 @@ export async function handleFindAndCancelReservation(
     const reservation = reservations[0];
 
     // Annuler la réservation trouvée
-    const { error: updateError } = await getSupabaseAdmin()
+    console.log("🔄 Attempting to cancel reservation ID:", reservation.id);
+    console.log("   Current status:", reservation.status);
+
+    const { data: updateData, error: updateError } = await getSupabaseAdmin()
       .from("reservations")
       .update({ status: "cancelled" })
-      .eq("id", reservation.id);
+      .eq("id", reservation.id)
+      .select();
 
     if (updateError) {
-      console.error("❌ Database error:", updateError);
+      console.error("❌ Database update error:", updateError);
       return {
         success: false,
         message: `Erreur lors de l'annulation: ${updateError.message}`,
       };
     }
 
-    console.log("✅ Reservation found and cancelled:", reservation.id);
+    if (!updateData || updateData.length === 0) {
+      console.error("❌ Update returned no data - possible RLS issue");
+      return {
+        success: false,
+        message: "Impossible d'annuler la réservation. Veuillez contacter le restaurant.",
+      };
+    }
+
+    console.log("✅ Reservation cancelled successfully:", reservation.id);
+    console.log("   Updated data:", JSON.stringify(updateData[0], null, 2));
 
     // Formater la date pour le message de confirmation
     const reservationDate = new Date(reservation.reservation_date);
@@ -711,17 +724,33 @@ async function fallbackFindAndCancel(args: FindAndCancelReservationArgs) {
 
   const reservation = reservations[0];
 
-  const { error: updateError } = await getSupabaseAdmin()
+  console.log("🔄 [FALLBACK] Attempting to cancel reservation ID:", reservation.id);
+  console.log("   Current status:", reservation.status);
+
+  const { data: updateData, error: updateError } = await getSupabaseAdmin()
     .from("reservations")
     .update({ status: "cancelled" })
-    .eq("id", reservation.id);
+    .eq("id", reservation.id)
+    .select();
 
   if (updateError) {
+    console.error("❌ [FALLBACK] Database update error:", updateError);
     return {
       success: false,
       message: `Erreur lors de l'annulation: ${updateError.message}`,
     };
   }
+
+  if (!updateData || updateData.length === 0) {
+    console.error("❌ [FALLBACK] Update returned no data - possible RLS issue");
+    return {
+      success: false,
+      message: "Impossible d'annuler la réservation. Veuillez contacter le restaurant.",
+    };
+  }
+
+  console.log("✅ [FALLBACK] Reservation cancelled successfully:", reservation.id);
+  console.log("   Updated data:", JSON.stringify(updateData[0], null, 2));
 
   const reservationDate = new Date(reservation.reservation_date);
   const dateStr = reservationDate.toLocaleDateString("fr-FR", {
