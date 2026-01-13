@@ -132,6 +132,19 @@ Agent must pause after collecting date/time/party size to explicitly confirm det
   - Capacity: 40 covers
   - SMS enabled
 
+**Issue #3 - Test Feedback Corrections (2026-01-13 11:00)**
+- **Problem 1:** Customer name saving "monsieur Gombert" instead of "Gombert"
+- **Problem 2:** Agent unable to answer questions about opening hours
+- **Solution:**
+  - Added get_restaurant_info function to fetch hours from database - commit 7f25ce8
+  - Updated SYSTEM_PROMPT to instruct removal of titles from names
+  - Agent now calls get_restaurant_info when asked about hours
+- **Status:** Resolved - deployed to PRODUCTION
+- **Benefits:**
+  - Hours dynamically fetched from database (single source of truth)
+  - No config redeployment needed when hours change
+  - Cleaner customer names in reservations table
+
 **Completion Notes:**
 
 **Implementation Approach:**
@@ -163,7 +176,8 @@ Agent must pause after collecting date/time/party size to explicitly confirm det
 4. If all tests pass, story can be marked "Ready for Review"
 
 **File List:**
-- Modified: `/scripts/update-vapi-config.ts` (SYSTEM_PROMPT FLOW section + voice provider fix + serverUrl)
+- Modified: `/scripts/update-vapi-config.ts` (SYSTEM_PROMPT + voice fix + serverUrl + get_restaurant_info function + name handling)
+- Modified: `/lib/vapi/tools.ts` (added get_restaurant_info function + router update)
 - Created: `docs/stories/story-1.1-test-protocol.md` (test documentation)
 - Created: `backups/vapi-config-working-2026-01-13T10-12-36-682Z.json` (config backup)
 - Updated: `backups/vapi-config-working-LATEST.json` (latest backup)
