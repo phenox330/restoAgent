@@ -350,8 +350,8 @@ async function updateVapiConfig() {
       temperature: 0.7
     },
     voice: {
-      provider: "openai",
-      voiceId: "alloy"
+      provider: "11labs",
+      voiceId: "EXAVITQu4vr4xnSDxMaL"  // Charlotte - voix française native
     },
     firstMessage: "Bonjour ! Restaurant épicurie, je vous écoute.",
     transcriber: TRANSCRIBER,
