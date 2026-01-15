@@ -1178,25 +1178,46 @@ export async function handleCreateTechnicalErrorRequest(
       };
     }
 
+    // Préparer les données de base
+    const errorRequestData: any = {
+      restaurant_id: args.restaurant_id,
+      customer_name: args.customer_name.trim(),
+      customer_phone: args.customer_phone.trim(),
+      customer_email: null,
+      reservation_date: null, // NULL - détails dans internal_notes
+      reservation_time: null, // NULL - détails dans internal_notes
+      number_of_guests: 1, // Valeur par défaut (contrainte DB > 0)
+      duration: 90,
+      status: "pending_request",
+      source: "phone",
+      request_type: "technical_error",
+      special_requests: "Demande suite à une erreur technique",
+      internal_notes: `Erreur technique survenue pendant l'appel. Client a fourni ses coordonnées pour rappel. Consulter les logs de l'appel pour les détails de la demande.${args.call_id ? ` Vapi Call ID: ${args.call_id}` : ""}`,
+    };
+
+    // Vérifier si le call existe dans la table calls avant de l'associer
+    // (même pattern que handleCreateReservation)
+    if (args.call_id) {
+      const { data: callExists } = await getSupabaseAdmin()
+        .from("calls")
+        .select("id")
+        .eq("vapi_call_id", args.call_id)
+        .single();
+
+      if (callExists) {
+        errorRequestData.call_id = callExists.id;
+        console.log("✅ Call ID linked to error request:", callExists.id);
+      } else {
+        console.log(
+          "⚠️ Call ID not found in database, creating technical error request without call_id"
+        );
+      }
+    }
+
     // Créer l'enregistrement de type "technical_error"
     const { data: errorRequest, error: insertError } = await getSupabaseAdmin()
       .from("reservations")
-      .insert({
-        restaurant_id: args.restaurant_id,
-        customer_name: args.customer_name.trim(),
-        customer_phone: args.customer_phone.trim(),
-        customer_email: null,
-        reservation_date: null, // NULL - détails dans internal_notes
-        reservation_time: null, // NULL - détails dans internal_notes
-        number_of_guests: 1, // Valeur par défaut (contrainte DB > 0)
-        duration: 90,
-        status: "pending_request",
-        source: "phone",
-        request_type: "technical_error",
-        special_requests: "Demande suite à une erreur technique",
-        internal_notes: `Erreur technique survenue pendant l'appel. Client a fourni ses coordonnées pour rappel. Consulter les logs de l'appel pour les détails de la demande.${args.call_id ? ` Call ID: ${args.call_id}` : ""}`,
-        call_id: args.call_id || null,
-      })
+      .insert(errorRequestData)
       .select()
       .single();
 
