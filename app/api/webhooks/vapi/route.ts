@@ -4,6 +4,27 @@ import { handleToolCall } from "@/lib/vapi/tools";
 import { withVapiWebhookVerification } from "@/lib/vapi/webhook-verification";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import type { Database } from "@/types/database";
+import {
+  logTechnicalError,
+  createGracefulErrorResponse,
+  getErrorType,
+} from "@/lib/error-logger";
+
+/**
+ * Wrapper to execute function with timeout protection
+ * Vapi expects responses within 20 seconds
+ */
+async function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number = 18000 // 18s to stay under 20s Vapi limit
+): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error("Function execution timeout")), timeoutMs)
+    ),
+  ]);
+}
 
 export async function POST(request: NextRequest) {
   // Log TOUT dès le début
@@ -122,11 +143,53 @@ export async function POST(request: NextRequest) {
 
           console.log("Enriched params:", JSON.stringify(enrichedParams, null, 2));
 
-          // Exécuter la fonction
+          // Exécuter la fonction avec timeout protection (Story 1.2)
           console.log("Calling handleToolCall for:", functionName);
-          const result = await handleToolCall(functionName, enrichedParams);
+          let result;
 
-          console.log("Function result:", JSON.stringify(result, null, 2));
+          try {
+            // Wrap in timeout protection - Vapi expects response within 20s
+            result = await withTimeout(
+              handleToolCall(functionName, enrichedParams),
+              18000 // 18s timeout to stay under Vapi's 20s limit
+            );
+
+            console.log("Function result:", JSON.stringify(result, null, 2));
+          } catch (functionError) {
+            // Log the technical error with full context (Story 1.2)
+            const errorType = getErrorType(functionError);
+
+            logTechnicalError({
+              timestamp: new Date().toISOString(),
+              error_type: errorType,
+              error_message: functionError instanceof Error ? functionError.message : String(functionError),
+              stack_trace: functionError instanceof Error ? functionError.stack : undefined,
+              call_id: message.call?.id,
+              function_name: functionName,
+              parameters: enrichedParams,
+              restaurant_id: restaurantId,
+              context: {
+                event_type: message.type,
+                tool_call_id: toolCall.id,
+              },
+            });
+
+            // Return graceful error response that triggers agent fallback
+            // The SYSTEM_PROMPT will instruct the agent to capture customer info
+            const gracefulErrorMessage = createGracefulErrorResponse(functionName);
+
+            console.log("=== RETURNING ERROR TO VAPI (GRACEFUL) ===");
+            console.log("Tool Call ID:", toolCall.id);
+            console.log("Error Response:", gracefulErrorMessage);
+            console.log("=== END ===");
+
+            return NextResponse.json({
+              results: [{
+                toolCallId: toolCall.id,
+                result: gracefulErrorMessage,
+              }]
+            });
+          }
 
           // Pour get_current_date, retourner un objet structuré
           let finalResult;
