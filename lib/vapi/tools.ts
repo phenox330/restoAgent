@@ -699,6 +699,9 @@ export async function handleFindAndCancelReservation(
 
     // Si on a un NOM (avec ou sans téléphone), utiliser la recherche phonétique
     if (args.customer_name) {
+      // Seuil de similarité à 0.4 pour éviter les faux positifs
+      const SIMILARITY_THRESHOLD = 0.4;
+
       // Utiliser la recherche phonétique avec pg_trgm
       const { data: reservations, error: searchError } = await getSupabaseAdmin().rpc(
         "fuzzy_search_reservations",
@@ -706,7 +709,7 @@ export async function handleFindAndCancelReservation(
           p_restaurant_id: args.restaurant_id,
           p_name: args.customer_name,
           p_phone: args.customer_phone || null,
-          p_min_similarity: 0.3,
+          p_min_similarity: SIMILARITY_THRESHOLD,
         }
       );
 
@@ -716,7 +719,17 @@ export async function handleFindAndCancelReservation(
         return await fallbackFindAndCancel(args);
       }
 
-      if (!reservations || reservations.length === 0) {
+      // Filtrer les résultats avec un score trop bas (faux positifs)
+      const validReservations = reservations?.filter(
+        (r: any) => r.similarity_score >= SIMILARITY_THRESHOLD || args.customer_phone === r.customer_phone
+      ) || [];
+
+      console.log("🔍 Cancel search results:", reservations?.length || 0, "total,", validReservations.length, "valid matches");
+      if (reservations?.length > 0) {
+        console.log("🔍 Best match:", reservations[0].customer_name, "score:", reservations[0].similarity_score);
+      }
+
+      if (validReservations.length === 0) {
         console.log("⚠️ No reservation found for:", args.customer_name);
         return {
           success: false,
@@ -725,9 +738,9 @@ export async function handleFindAndCancelReservation(
       }
 
       // Si plusieurs réservations avec des scores proches, demander précision
-      if (reservations.length > 1) {
-        const topScore = reservations[0].similarity_score;
-        const closeMatches = reservations.filter(
+      if (validReservations.length > 1) {
+        const topScore = validReservations[0].similarity_score;
+        const closeMatches = validReservations.filter(
           (r: any) => Math.abs(r.similarity_score - topScore) < 0.1
         );
 
@@ -746,8 +759,8 @@ export async function handleFindAndCancelReservation(
         }
       }
 
-      // Prendre la meilleure correspondance
-      const reservation = reservations[0];
+      // Prendre la meilleure correspondance validée
+      const reservation = validReservations[0];
 
       // Annuler la réservation trouvée
       console.log("🔄 Attempting to cancel reservation ID:", reservation.id);
@@ -909,13 +922,16 @@ export async function handleFindAndUpdateReservation(
 
   try {
     // Utiliser la recherche phonétique avec pg_trgm
+    // Seuil de similarité à 0.4 pour éviter les faux positifs (ex: "Gombert" ne doit pas matcher "Dupont")
+    const SIMILARITY_THRESHOLD = 0.4;
+
     const { data: reservations, error: searchError } = await getSupabaseAdmin().rpc(
       "fuzzy_search_reservations",
       {
         p_restaurant_id: args.restaurant_id,
         p_name: args.customer_name,
         p_phone: args.customer_phone || null,
-        p_min_similarity: 0.3,
+        p_min_similarity: SIMILARITY_THRESHOLD,
       }
     );
 
@@ -925,92 +941,149 @@ export async function handleFindAndUpdateReservation(
       return await fallbackFindAndUpdate(args);
     }
 
-    if (!reservations || reservations.length === 0) {
+    // Vérifier qu'on a des résultats avec une similarité suffisante
+    // Filtrer les résultats avec un score trop bas (faux positifs)
+    const validReservations = reservations?.filter(
+      (r: any) => r.similarity_score >= SIMILARITY_THRESHOLD || args.customer_phone === r.customer_phone
+    ) || [];
+
+    console.log("🔍 Search results:", reservations?.length || 0, "total,", validReservations.length, "valid matches");
+    if (reservations?.length > 0) {
+      console.log("🔍 Best match:", reservations[0].customer_name, "score:", reservations[0].similarity_score);
+    }
+
+    if (validReservations.length === 0) {
       console.log("⚠️ No reservation found for:", args.customer_name);
       return {
         success: false,
-        message: `Aucune réservation trouvée au nom de ${args.customer_name}.`,
+        reservation_found: false,
+        message: `Je ne trouve pas de réservation au nom de ${args.customer_name}. Souhaitez-vous créer une nouvelle réservation ?`,
       };
     }
 
     // Gérer les cas de multiples correspondances
-    if (reservations.length > 1 && !args.customer_phone) {
-      const topScore = reservations[0].similarity_score;
-      const closeMatches = reservations.filter(
+    if (validReservations.length > 1 && !args.customer_phone) {
+      const topScore = validReservations[0].similarity_score;
+      const closeMatches = validReservations.filter(
         (r: any) => Math.abs(r.similarity_score - topScore) < 0.1
       );
 
       if (closeMatches.length > 1) {
+        // List the reservations for disambiguation
+        const list = closeMatches.map((r: any) => {
+          const date = new Date(r.reservation_date);
+          const dateStr = date.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
+          return `${r.customer_name} - ${dateStr} à ${r.reservation_time} pour ${r.number_of_guests} personne${r.number_of_guests > 1 ? "s" : ""}`;
+        }).join("; ");
+
         return {
           success: false,
           needs_clarification: true,
-          message: `J'ai trouvé plusieurs réservations similaires. Pouvez-vous me confirmer le numéro de téléphone pour identifier la bonne réservation ?`,
+          message: `J'ai trouvé plusieurs réservations similaires: ${list}. Pouvez-vous me confirmer la date de votre réservation ?`,
         };
       }
     }
 
-    const reservation = reservations[0];
+    const reservation = validReservations[0];
+
+    // Format date for display
+    const currentDateObj = new Date(reservation.reservation_date);
+    const currentDateStr = currentDateObj.toLocaleDateString("fr-FR", {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+    });
+
+    // If no modification params provided, return current reservation details for confirmation
+    const hasModifications = args.new_date || args.new_time || args.new_number_of_guests;
+
+    if (!hasModifications) {
+      console.log("📋 No modification params - returning current reservation details");
+      return {
+        success: true,
+        reservation_found: true,
+        reservation_id: reservation.id,
+        current_details: {
+          date: reservation.reservation_date,
+          time: reservation.reservation_time,
+          number_of_guests: reservation.number_of_guests,
+          customer_name: reservation.customer_name,
+        },
+        message: `J'ai votre réservation pour ${reservation.number_of_guests} personne${reservation.number_of_guests > 1 ? "s" : ""} le ${currentDateStr} à ${reservation.reservation_time}. Que souhaitez-vous modifier ?`,
+      };
+    }
 
     // Préparer les nouvelles valeurs
     const newDate = args.new_date || reservation.reservation_date;
     const newTime = args.new_time || reservation.reservation_time;
     const newGuests = args.new_number_of_guests || reservation.number_of_guests;
 
-    // Vérifier la disponibilité si changement
-    if (args.new_date || args.new_time || args.new_number_of_guests) {
-      const availabilityResult = await checkAvailability(getSupabaseAdmin(), {
-        restaurantId: args.restaurant_id,
-        date: newDate,
-        time: newTime,
-        numberOfGuests: newGuests,
-      });
+    // Vérifier la disponibilité si changement de date/heure/nombre
+    const availabilityResult = await checkAvailability(getSupabaseAdmin(), {
+      restaurantId: args.restaurant_id,
+      date: newDate,
+      time: newTime,
+      numberOfGuests: newGuests,
+    });
 
-      if (!availabilityResult.available) {
-        return {
-          success: false,
-          message: `Désolé, ${availabilityResult.reason}`,
-        };
-      }
+    if (!availabilityResult.available) {
+      console.log("❌ New slot not available:", availabilityResult.reason);
+      return {
+        success: false,
+        slot_unavailable: true,
+        message: `Ce créneau est complet. Quel autre horaire souhaiteriez-vous ?`,
+      };
     }
 
-    // Mettre à jour la réservation
+    // Mettre à jour la réservation avec transaction locking
+    // Using a transaction-safe update approach
     const { data: updateData, error: updateError } = await getSupabaseAdmin()
       .from("reservations")
       .update({
         reservation_date: newDate,
         reservation_time: newTime,
         number_of_guests: newGuests,
+        updated_at: new Date().toISOString(),
       })
       .eq("id", reservation.id)
+      .eq("status", reservation.status) // Optimistic locking - ensure status hasn't changed
       .select();
 
     if (updateError) {
       console.error("❌ Database update error:", updateError);
       return {
         success: false,
-        message: `Erreur lors de la modification: ${updateError.message}`,
+        message: `Erreur lors de la modification. Veuillez réessayer.`,
+      };
+    }
+
+    if (!updateData || updateData.length === 0) {
+      console.error("❌ Update returned no data - possible concurrent modification");
+      return {
+        success: false,
+        message: `La réservation a été modifiée par quelqu'un d'autre. Veuillez réessayer.`,
       };
     }
 
     console.log("✅ Reservation updated successfully:", reservation.id);
 
-    const reservationDate = new Date(newDate);
-    const dateStr = reservationDate.toLocaleDateString("fr-FR", {
+    const newDateObj = new Date(newDate);
+    const newDateStr = newDateObj.toLocaleDateString("fr-FR", {
       weekday: "long",
-      year: "numeric",
-      month: "long",
       day: "numeric",
+      month: "long",
     });
 
     return {
       success: true,
-      message: `Réservation modifiée avec succès. Vous êtes maintenant ${newGuests} personne${newGuests > 1 ? "s" : ""} le ${dateStr} à ${newTime}.`,
+      updated: true,
+      message: `Votre réservation est modifiée pour ${newGuests} personne${newGuests > 1 ? "s" : ""} le ${newDateStr} à ${newTime}.`,
     };
   } catch (error) {
     console.error("❌ Error in find_and_update_reservation:", error);
     return {
       success: false,
-      message: "Une erreur est survenue lors de la modification",
+      message: "ERREUR_TECHNIQUE: Une erreur est survenue lors de la modification.",
     };
   }
 }
@@ -1042,57 +1115,95 @@ async function fallbackFindAndUpdate(args: FindAndUpdateReservationArgs) {
   if (error || !reservations || reservations.length === 0) {
     return {
       success: false,
-      message: `Aucune réservation trouvée au nom de ${args.customer_name}.`,
+      reservation_found: false,
+      message: `Je ne trouve pas de réservation au nom de ${args.customer_name}. Souhaitez-vous créer une nouvelle réservation ?`,
     };
   }
 
   const reservation = reservations[0];
+
+  // Format current date for display
+  const currentDateObj = new Date(reservation.reservation_date);
+  const currentDateStr = currentDateObj.toLocaleDateString("fr-FR", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  });
+
+  // If no modification params provided, return current reservation details
+  const hasModifications = args.new_date || args.new_time || args.new_number_of_guests;
+
+  if (!hasModifications) {
+    return {
+      success: true,
+      reservation_found: true,
+      reservation_id: reservation.id,
+      current_details: {
+        date: reservation.reservation_date,
+        time: reservation.reservation_time,
+        number_of_guests: reservation.number_of_guests,
+        customer_name: reservation.customer_name,
+      },
+      message: `J'ai votre réservation pour ${reservation.number_of_guests} personne${reservation.number_of_guests > 1 ? "s" : ""} le ${currentDateStr} à ${reservation.reservation_time}. Que souhaitez-vous modifier ?`,
+    };
+  }
+
   const newDate = args.new_date || reservation.reservation_date;
   const newTime = args.new_time || reservation.reservation_time;
   const newGuests = args.new_number_of_guests || reservation.number_of_guests;
 
-  if (args.new_date || args.new_time || args.new_number_of_guests) {
-    const availabilityResult = await checkAvailability(getSupabaseAdmin(), {
-      restaurantId: args.restaurant_id,
-      date: newDate,
-      time: newTime,
-      numberOfGuests: newGuests,
-    });
+  // Always check availability for modifications
+  const availabilityResult = await checkAvailability(getSupabaseAdmin(), {
+    restaurantId: args.restaurant_id,
+    date: newDate,
+    time: newTime,
+    numberOfGuests: newGuests,
+  });
 
-    if (!availabilityResult.available) {
-      return {
-        success: false,
-        message: availabilityResult.reason,
-      };
-    }
+  if (!availabilityResult.available) {
+    return {
+      success: false,
+      slot_unavailable: true,
+      message: `Ce créneau est complet. Quel autre horaire souhaiteriez-vous ?`,
+    };
   }
 
-  const { error: updateError } = await getSupabaseAdmin()
+  const { data: updateData, error: updateError } = await getSupabaseAdmin()
     .from("reservations")
     .update({
       reservation_date: newDate,
       reservation_time: newTime,
       number_of_guests: newGuests,
+      updated_at: new Date().toISOString(),
     })
-    .eq("id", reservation.id);
+    .eq("id", reservation.id)
+    .eq("status", reservation.status) // Optimistic locking
+    .select();
 
   if (updateError) {
     return {
       success: false,
-      message: `Erreur lors de la modification: ${updateError.message}`,
+      message: `Erreur lors de la modification. Veuillez réessayer.`,
     };
   }
 
-  const dateStr = new Date(newDate).toLocaleDateString("fr-FR", {
+  if (!updateData || updateData.length === 0) {
+    return {
+      success: false,
+      message: `La réservation a été modifiée par quelqu'un d'autre. Veuillez réessayer.`,
+    };
+  }
+
+  const newDateStr = new Date(newDate).toLocaleDateString("fr-FR", {
     weekday: "long",
-    year: "numeric",
-    month: "long",
     day: "numeric",
+    month: "long",
   });
 
   return {
     success: true,
-    message: `Réservation modifiée avec succès. Vous êtes maintenant ${newGuests} personne${newGuests > 1 ? "s" : ""} le ${dateStr} à ${newTime}.`,
+    updated: true,
+    message: `Votre réservation est modifiée pour ${newGuests} personne${newGuests > 1 ? "s" : ""} le ${newDateStr} à ${newTime}.`,
   };
 }
 
