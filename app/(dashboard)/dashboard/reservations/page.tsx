@@ -1,6 +1,6 @@
 import { ReservationsFilters } from "@/components/reservations/reservations-filters";
-import { ReservationsTable } from "@/components/reservations/reservations-table";
-import { getReservations, getNeedsConfirmationCount } from "@/lib/reservations/actions";
+import { ReservationsPageClient } from "@/components/reservations/reservations-page-client";
+import { getReservations, getNeedsConfirmationCount, getRestaurantId } from "@/lib/reservations/actions";
 import { AlertCircle } from "lucide-react";
 
 interface ReservationsPageProps {
@@ -15,7 +15,7 @@ interface ReservationsPageProps {
 export default async function ReservationsPage({ searchParams }: ReservationsPageProps) {
   const params = await searchParams;
 
-  const [result, needsConfirmationResult] = await Promise.all([
+  const [result, needsConfirmationResult, restaurantId] = await Promise.all([
     getReservations({
       date: params.date,
       status: params.status as any,
@@ -23,6 +23,7 @@ export default async function ReservationsPage({ searchParams }: ReservationsPag
       needs_confirmation: params.needs_confirmation,
     }),
     getNeedsConfirmationCount(),
+    getRestaurantId(),
   ]);
 
   const reservations = result.data || [];
@@ -51,7 +52,14 @@ export default async function ReservationsPage({ searchParams }: ReservationsPag
 
       <ReservationsFilters />
 
-      <ReservationsTable reservations={reservations} />
+      {restaurantId ? (
+        <ReservationsPageClient
+          initialReservations={reservations}
+          restaurantId={restaurantId}
+        />
+      ) : (
+        <p className="text-muted-foreground">Aucun restaurant configuré</p>
+      )}
     </div>
   );
 }

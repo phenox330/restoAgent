@@ -21,11 +21,13 @@ import { AlertCircle, MessageSquare } from "lucide-react";
 interface ReservationsTableProps {
   reservations: Reservation[];
   showConfidenceScore?: boolean;
+  newReservationIds?: Set<string>;
 }
 
 export function ReservationsTable({
   reservations,
   showConfidenceScore = false,
+  newReservationIds,
 }: ReservationsTableProps) {
   const [selectedReservation, setSelectedReservation] = useState<Reservation | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -90,6 +92,7 @@ export function ReservationsTable({
                         reservation={reservation}
                         showConfidenceScore={true}
                         onRowClick={handleRowClick}
+                        isNew={newReservationIds?.has(reservation.id)}
                       />
                     ))}
                   </TableBody>
@@ -126,6 +129,7 @@ export function ReservationsTable({
                       reservation={reservation}
                       showConfidenceScore={showConfidenceScore}
                       onRowClick={handleRowClick}
+                      isNew={newReservationIds?.has(reservation.id)}
                     />
                   ))}
                 </TableBody>
@@ -149,12 +153,14 @@ interface ReservationRowProps {
   reservation: Reservation;
   showConfidenceScore?: boolean;
   onRowClick: (reservation: Reservation) => void;
+  isNew?: boolean;
 }
 
 function ReservationRow({
   reservation,
   showConfidenceScore = false,
   onRowClick,
+  isNew = false,
 }: ReservationRowProps) {
   const date = new Date(reservation.reservation_date);
   const formattedDate = format(date, "EEE dd MMM yyyy", { locale: fr });
@@ -168,7 +174,7 @@ function ReservationRow({
 
   return (
     <TableRow
-      className="cursor-pointer hover:bg-muted/50"
+      className={`cursor-pointer hover:bg-muted/50 ${isNew ? "new-reservation" : ""}`}
       onClick={handleCellClick}
     >
       <TableCell className="font-medium">{formattedDate}</TableCell>

@@ -24,6 +24,12 @@ import {
   deleteReservation,
   confirmReservationManually,
 } from "@/lib/reservations/actions";
+import {
+  notifyConfirmationSuccess,
+  notifyCancellationSuccess,
+  notifyDeletionSuccess,
+  notifyError,
+} from "@/lib/notifications";
 import { ReservationDetailsDialog } from "./reservation-details-dialog";
 import type { Reservation } from "@/types";
 
@@ -42,8 +48,13 @@ export function ReservationActions({ reservation }: ReservationActionsProps) {
     const result = await updateReservationStatus(reservation.id, status);
 
     if (result.error) {
-      alert(result.error);
+      notifyError(result.error);
     } else {
+      if (status === "confirmed") {
+        notifyConfirmationSuccess();
+      } else if (status === "cancelled") {
+        notifyCancellationSuccess();
+      }
       router.refresh();
     }
     setLoading(false);
@@ -54,8 +65,9 @@ export function ReservationActions({ reservation }: ReservationActionsProps) {
     const result = await confirmReservationManually(reservation.id);
 
     if (result.error) {
-      alert(result.error);
+      notifyError(result.error);
     } else {
+      notifyConfirmationSuccess();
       router.refresh();
     }
     setLoading(false);
@@ -66,8 +78,9 @@ export function ReservationActions({ reservation }: ReservationActionsProps) {
     const result = await deleteReservation(reservation.id);
 
     if (result.error) {
-      alert(result.error);
+      notifyError(result.error);
     } else {
+      notifyDeletionSuccess();
       setDeleteDialogOpen(false);
       router.refresh();
     }

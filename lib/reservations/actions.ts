@@ -338,3 +338,27 @@ export async function getNeedsConfirmationCount() {
     return { count: 0 };
   }
 }
+
+/**
+ * Récupère l'ID du restaurant de l'utilisateur courant
+ */
+export async function getRestaurantId(): Promise<string | null> {
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+      return null;
+    }
+
+    const { data: restaurant } = await supabase
+      .from("restaurants")
+      .select("id")
+      .eq("user_id", user.id)
+      .single();
+
+    return restaurant?.id || null;
+  } catch {
+    return null;
+  }
+}
