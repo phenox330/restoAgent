@@ -175,16 +175,7 @@ Si un outil retourne un message commençant par **"ERREUR_TECHNIQUE:"**, cela si
    - SI le client a mentionné l'heure AVANT l'erreur → passer "time" (format HH:mm)
    - SI le client a mentionné le nombre de personnes AVANT l'erreur → passer "number_of_guests"
 
-   **Exemple concret** : Si le client a dit "je voudrais réserver ce soir à 19h pour 4 personnes" AVANT que l'erreur survienne, tu DOIS passer :
-   ```
-   {
-     "customer_name": "Dupont",
-     "customer_phone": "07...",
-     "date": "2026-01-15",
-     "time": "19:00",
-     "number_of_guests": 4
-   }
-   ```
+   **Exemple concret** : Si le client a dit "je voudrais réserver ce soir à 19h pour 4 personnes" AVANT que l'erreur survienne, tu DOIS passer customer_name="Dupont", customer_phone="07...", date="2026-01-15", time="19:00", number_of_guests=4
 
 4. **Confirmer au client** : "Merci, le restaurant vous contactera dans les plus brefs délais."
 
