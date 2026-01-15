@@ -1,11 +1,12 @@
 "use client";
 
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
-import { Separator } from "@/components/ui/separator";
-import type { OpeningHours, DaySchedule } from "@/lib/restaurant/schemas";
+import { Clock, Plus } from "lucide-react";
+import { OpeningHoursSetup } from "./opening-hours-setup";
+import { OpeningHoursDisplay } from "./opening-hours-display";
+import type { OpeningHours } from "@/lib/restaurant/schemas";
 
 interface OpeningHoursFormProps {
   value: OpeningHours;
@@ -13,162 +14,80 @@ interface OpeningHoursFormProps {
   disabled?: boolean;
 }
 
-const daysOfWeek = [
-  { key: "monday" as const, label: "Lundi" },
-  { key: "tuesday" as const, label: "Mardi" },
-  { key: "wednesday" as const, label: "Mercredi" },
-  { key: "thursday" as const, label: "Jeudi" },
-  { key: "friday" as const, label: "Vendredi" },
-  { key: "saturday" as const, label: "Samedi" },
-  { key: "sunday" as const, label: "Dimanche" },
-];
+/**
+ * Check if opening hours are configured (has at least one day with service)
+ */
+function hasConfiguredHours(hours: OpeningHours): boolean {
+  const days: (keyof OpeningHours)[] = [
+    "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"
+  ];
+
+  return days.some((day) => {
+    const schedule = hours[day];
+    return schedule && (schedule.lunch || schedule.dinner);
+  });
+}
 
 export function OpeningHoursForm({ value, onChange, disabled }: OpeningHoursFormProps) {
-  const updateDay = (day: keyof OpeningHours, schedule: DaySchedule | undefined) => {
-    onChange({
-      ...value,
-      [day]: schedule,
-    });
-  };
+  const isConfigured = hasConfiguredHours(value);
+  const [showSetup, setShowSetup] = useState(false);
 
-  const toggleService = (
-    day: keyof OpeningHours,
-    service: "lunch" | "dinner",
-    enabled: boolean
-  ) => {
-    const currentDay = value[day] || {};
-    updateDay(day, {
-      ...currentDay,
-      [service]: enabled ? { start: "12:00", end: "14:00" } : undefined,
-    });
-  };
-
-  const updateTime = (
-    day: keyof OpeningHours,
-    service: "lunch" | "dinner",
-    field: "start" | "end",
-    time: string
-  ) => {
-    const currentDay = value[day] || {};
-    const currentService = currentDay[service] || { start: "12:00", end: "14:00" };
-
-    updateDay(day, {
-      ...currentDay,
-      [service]: {
-        ...currentService,
-        [field]: time,
-      },
-    });
-  };
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Horaires d&apos;ouverture</CardTitle>
-        <CardDescription>
-          Configurez vos horaires de service (midi et/ou soir)
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        {daysOfWeek.map((day, index) => {
-          const daySchedule = value[day.key] || {};
-          const hasLunch = !!daySchedule.lunch;
-          const hasDinner = !!daySchedule.dinner;
-
-          return (
-            <div key={day.key}>
-              {index > 0 && <Separator className="mb-6" />}
-              <div className="space-y-4">
-                <h4 className="font-medium">{day.label}</h4>
-
-                {/* Service midi */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor={`${day.key}-lunch`}>Service midi</Label>
-                    <Switch
-                      id={`${day.key}-lunch`}
-                      checked={hasLunch}
-                      onCheckedChange={(checked) =>
-                        toggleService(day.key, "lunch", checked)
-                      }
-                      disabled={disabled}
-                    />
-                  </div>
-
-                  {hasLunch && (
-                    <div className="grid grid-cols-2 gap-4 ml-6">
-                      <div className="space-y-1">
-                        <Label className="text-xs text-muted-foreground">Ouverture</Label>
-                        <Input
-                          type="time"
-                          value={daySchedule.lunch?.start || "12:00"}
-                          onChange={(e) =>
-                            updateTime(day.key, "lunch", "start", e.target.value)
-                          }
-                          disabled={disabled}
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs text-muted-foreground">Fermeture</Label>
-                        <Input
-                          type="time"
-                          value={daySchedule.lunch?.end || "14:00"}
-                          onChange={(e) =>
-                            updateTime(day.key, "lunch", "end", e.target.value)
-                          }
-                          disabled={disabled}
-                        />
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Service soir */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor={`${day.key}-dinner`}>Service soir</Label>
-                    <Switch
-                      id={`${day.key}-dinner`}
-                      checked={hasDinner}
-                      onCheckedChange={(checked) =>
-                        toggleService(day.key, "dinner", checked)
-                      }
-                      disabled={disabled}
-                    />
-                  </div>
-
-                  {hasDinner && (
-                    <div className="grid grid-cols-2 gap-4 ml-6">
-                      <div className="space-y-1">
-                        <Label className="text-xs text-muted-foreground">Ouverture</Label>
-                        <Input
-                          type="time"
-                          value={daySchedule.dinner?.start || "19:00"}
-                          onChange={(e) =>
-                            updateTime(day.key, "dinner", "start", e.target.value)
-                          }
-                          disabled={disabled}
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs text-muted-foreground">Fermeture</Label>
-                        <Input
-                          type="time"
-                          value={daySchedule.dinner?.end || "22:00"}
-                          onChange={(e) =>
-                            updateTime(day.key, "dinner", "end", e.target.value)
-                          }
-                          disabled={disabled}
-                        />
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
+  // Empty state - show setup button
+  if (!isConfigured && !showSetup) {
+    return (
+      <Card className="border-dashed">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Clock className="h-5 w-5" />
+            Horaires d&apos;ouverture
+          </CardTitle>
+          <CardDescription>
+            Configurez vos horaires de service pour commencer à recevoir des réservations
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col items-center justify-center py-8 text-center">
+            <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
+              <Clock className="h-8 w-8 text-primary" />
             </div>
-          );
-        })}
-      </CardContent>
-    </Card>
+            <h3 className="font-medium mb-2">Aucun horaire configuré</h3>
+            <p className="text-sm text-muted-foreground mb-6 max-w-sm">
+              Définissez rapidement vos horaires d&apos;ouverture et jours de fermeture en quelques clics
+            </p>
+            <Button
+              type="button"
+              onClick={() => setShowSetup(true)}
+              disabled={disabled}
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Configurer les horaires
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Setup wizard
+  if (showSetup) {
+    return (
+      <OpeningHoursSetup
+        onComplete={(hours) => {
+          onChange(hours);
+          setShowSetup(false);
+        }}
+        onCancel={() => setShowSetup(false)}
+      />
+    );
+  }
+
+  // Display configured hours
+  return (
+    <OpeningHoursDisplay
+      value={value}
+      onChange={onChange}
+      disabled={disabled}
+      onReset={() => setShowSetup(true)}
+    />
   );
 }
