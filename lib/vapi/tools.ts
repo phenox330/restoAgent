@@ -222,9 +222,6 @@ export async function handleGetCurrentDate() {
 
 // Tool 1: Vérifier les disponibilités
 export async function handleCheckAvailability(args: CheckAvailabilityArgs) {
-  // 🧪 TEST Story 1.2 - Simuler erreur DB
-  throw new Error("Simulated database connection error");
-
   console.log(
     "🔍 check_availability called with:",
     JSON.stringify(args, null, 2)
