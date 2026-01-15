@@ -1192,7 +1192,7 @@ export async function handleCreateTechnicalErrorRequest(
         customer_email: null,
         reservation_date: args.date || null, // NULL si non spécifié
         reservation_time: args.time || null, // NULL si non spécifié
-        number_of_guests: args.number_of_guests || 0,
+        number_of_guests: args.number_of_guests || 1, // 1 par défaut (contrainte DB > 0)
         duration: 90, // Durée par défaut
         status: "pending_request", // Statut spécial pour demandes en attente
         source: "phone",
