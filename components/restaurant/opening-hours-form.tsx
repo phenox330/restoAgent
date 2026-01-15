@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Clock, Plus } from "lucide-react";
 import { OpeningHoursSetup } from "./opening-hours-setup";
 import { OpeningHoursDisplay } from "./opening-hours-display";
@@ -35,36 +34,26 @@ export function OpeningHoursForm({ value, onChange, disabled }: OpeningHoursForm
   // Empty state - show setup button
   if (!isConfigured && !showSetup) {
     return (
-      <Card className="border-dashed">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Clock className="h-5 w-5" />
-            Horaires d&apos;ouverture
-          </CardTitle>
-          <CardDescription>
-            Configurez vos horaires de service pour commencer à recevoir des réservations
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-col items-center justify-center py-8 text-center">
-            <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
-              <Clock className="h-8 w-8 text-primary" />
-            </div>
-            <h3 className="font-medium mb-2">Aucun horaire configuré</h3>
-            <p className="text-sm text-muted-foreground mb-6 max-w-sm">
-              Définissez rapidement vos horaires d&apos;ouverture et jours de fermeture en quelques clics
-            </p>
-            <Button
-              type="button"
-              onClick={() => setShowSetup(true)}
-              disabled={disabled}
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Configurer les horaires
-            </Button>
+      <div className="bg-white/80 backdrop-blur-xl rounded-3xl border border-dashed border-gray-300 shadow-xl shadow-gray-200/40 p-8">
+        <div className="flex flex-col items-center justify-center text-center">
+          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-amber-100 to-orange-100 flex items-center justify-center mb-5">
+            <Clock className="h-8 w-8 text-amber-600" />
           </div>
-        </CardContent>
-      </Card>
+          <h3 className="text-lg font-semibold mb-2">Aucun horaire configuré</h3>
+          <p className="text-sm text-muted-foreground mb-6 max-w-sm">
+            Définissez rapidement vos horaires d&apos;ouverture et jours de fermeture en quelques clics
+          </p>
+          <Button
+            type="button"
+            onClick={() => setShowSetup(true)}
+            disabled={disabled}
+            className="h-12 px-6 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 shadow-lg shadow-amber-500/25 transition-all hover:shadow-xl"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Configurer les horaires
+          </Button>
+        </div>
+      </div>
     );
   }
 
