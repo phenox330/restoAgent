@@ -96,6 +96,36 @@ export function RestaurantForm({ restaurant }: RestaurantFormProps) {
   return (
     <>
       <form onSubmit={handleSubmit} className="space-y-8">
+        {/* Sticky Header with Save Button */}
+        <div className="sticky top-0 z-10 -mx-4 px-4 py-3 bg-white/80 backdrop-blur-xl border-b border-gray-200/60 -mt-4 mb-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-muted-foreground">
+                {restaurant ? "Modifiez les informations ci-dessous" : "Remplissez les informations pour créer votre restaurant"}
+              </p>
+            </div>
+            <Button
+              type="submit"
+              disabled={loading}
+              className="h-10 px-6 rounded-xl bg-gradient-to-r from-gray-900 to-gray-800 hover:from-gray-800 hover:to-gray-700 shadow-lg shadow-gray-900/25 transition-all hover:shadow-xl hover:shadow-gray-900/30"
+            >
+              {loading ? (
+                <span className="flex items-center gap-2">
+                  <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  Enregistrement...
+                </span>
+              ) : restaurant ? (
+                "Mettre à jour"
+              ) : (
+                <span className="flex items-center gap-2">
+                  Créer
+                  <ArrowRight className="h-4 w-4" />
+                </span>
+              )}
+            </Button>
+          </div>
+        </div>
+
         {/* Error Banner */}
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-2xl flex items-center gap-3 animate-in slide-in-from-top-2">
@@ -392,37 +422,6 @@ export function RestaurantForm({ restaurant }: RestaurantFormProps) {
           />
         </section>
 
-        {/* Actions */}
-        <div className="flex justify-end gap-3 pt-4">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => router.back()}
-            disabled={loading}
-            className="h-12 px-6 rounded-xl"
-          >
-            Annuler
-          </Button>
-          <Button
-            type="submit"
-            disabled={loading}
-            className="h-12 px-8 rounded-xl bg-gradient-to-r from-gray-900 to-gray-800 hover:from-gray-800 hover:to-gray-700 shadow-lg shadow-gray-900/25 transition-all hover:shadow-xl hover:shadow-gray-900/30"
-          >
-            {loading ? (
-              <span className="flex items-center gap-2">
-                <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                Enregistrement...
-              </span>
-            ) : restaurant ? (
-              "Mettre à jour"
-            ) : (
-              <span className="flex items-center gap-2">
-                Créer le restaurant
-                <ArrowRight className="h-4 w-4" />
-              </span>
-            )}
-          </Button>
-        </div>
       </form>
 
       {/* Success Modal */}
