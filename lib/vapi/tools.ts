@@ -938,7 +938,7 @@ export async function handleFindReservationForCancellation(
         date: dateStr,
         time: reservation.reservation_time,
         number_of_guests: reservation.number_of_guests,
-        message: `Réservation trouvée au nom de ${reservation.customer_name} pour ${reservation.number_of_guests} personne${reservation.number_of_guests > 1 ? "s" : ""} le ${dateStr} à ${reservation.reservation_time}.`,
+        message: `Réservation trouvée au nom de ${reservation.customer_name} pour ${reservation.number_of_guests} personne${reservation.number_of_guests > 1 ? "s" : ""} le ${dateStr} à ${reservation.reservation_time}. IMPORTANT: Pour annuler, appeler cancel_reservation avec reservation_id="${reservation.id}"`,
       };
     }
 
@@ -962,7 +962,7 @@ export async function handleFindReservationForCancellation(
     });
 
     const listStr = list.map((r: any) =>
-      `${r.index}. ${r.customer_name} - ${r.date} à ${r.time} pour ${r.number_of_guests} personne${r.number_of_guests > 1 ? "s" : ""}`
+      `${r.index}. ${r.customer_name} - ${r.date} à ${r.time} pour ${r.number_of_guests} personne${r.number_of_guests > 1 ? "s" : ""} (ID: ${r.reservation_id})`
     ).join(", ");
 
     return {
@@ -970,7 +970,7 @@ export async function handleFindReservationForCancellation(
       found: true,
       multiple: true,
       reservations: list,
-      message: `J'ai trouvé ${reservations.length} réservations : ${listStr}. Laquelle souhaitez-vous annuler ?`,
+      message: `J'ai trouvé ${reservations.length} réservations : ${listStr}. Laquelle souhaitez-vous annuler ? IMPORTANT: Utiliser le reservation_id correspondant pour cancel_reservation.`,
     };
 
   } catch (error) {
