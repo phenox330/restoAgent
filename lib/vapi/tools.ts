@@ -911,7 +911,7 @@ async function fallbackFindAndCancel(args: FindAndCancelReservationArgs) {
   };
 }
 
-// Tool 5: Rechercher et modifier une réservation (avec recherche phonétique)
+// Tool 5: Rechercher et modifier une réservation
 export async function handleFindAndUpdateReservation(
   args: FindAndUpdateReservationArgs
 ) {
@@ -921,38 +921,27 @@ export async function handleFindAndUpdateReservation(
   );
 
   try {
-    // Utiliser la recherche phonétique avec pg_trgm
-    // Seuil de similarité à 0.4 pour éviter les faux positifs (ex: "Gombert" ne doit pas matcher "Dupont")
-    const SIMILARITY_THRESHOLD = 0.4;
-
-    const { data: reservations, error: searchError } = await getSupabaseAdmin().rpc(
-      "fuzzy_search_reservations",
-      {
-        p_restaurant_id: args.restaurant_id,
-        p_name: args.customer_name,
-        p_phone: args.customer_phone || null,
-        p_min_similarity: SIMILARITY_THRESHOLD,
-      }
-    );
+    // Recherche simple et directe par nom (case-insensitive)
+    const { data: reservations, error: searchError } = await getSupabaseAdmin()
+      .from("reservations")
+      .select("*")
+      .eq("restaurant_id", args.restaurant_id)
+      .ilike("customer_name", `%${args.customer_name}%`)
+      .in("status", ["pending", "confirmed"])
+      .order("reservation_date", { ascending: true });
 
     if (searchError) {
       console.error("❌ Search error:", searchError);
-      // Fallback à la recherche classique
-      return await fallbackFindAndUpdate(args);
+      return {
+        success: false,
+        message: "ERREUR_TECHNIQUE: Impossible de rechercher la réservation.",
+      };
     }
 
-    // Vérifier qu'on a des résultats avec une similarité suffisante
-    // Filtrer les résultats avec un score trop bas (faux positifs)
-    const validReservations = reservations?.filter(
-      (r: any) => r.similarity_score >= SIMILARITY_THRESHOLD || args.customer_phone === r.customer_phone
-    ) || [];
+    console.log("🔍 Search for:", args.customer_name, "-> Found:", reservations?.length || 0, "reservations");
 
-    console.log("🔍 Search results:", reservations?.length || 0, "total,", validReservations.length, "valid matches");
-    if (reservations?.length > 0) {
-      console.log("🔍 Best match:", reservations[0].customer_name, "score:", reservations[0].similarity_score);
-    }
-
-    if (validReservations.length === 0) {
+    // Pas de réservation trouvée = pas de réservation
+    if (!reservations || reservations.length === 0) {
       console.log("⚠️ No reservation found for:", args.customer_name);
       return {
         success: false,
@@ -961,30 +950,22 @@ export async function handleFindAndUpdateReservation(
       };
     }
 
-    // Gérer les cas de multiples correspondances
-    if (validReservations.length > 1 && !args.customer_phone) {
-      const topScore = validReservations[0].similarity_score;
-      const closeMatches = validReservations.filter(
-        (r: any) => Math.abs(r.similarity_score - topScore) < 0.1
-      );
+    // Si plusieurs réservations, demander précision
+    if (reservations.length > 1) {
+      const list = reservations.map((r: any) => {
+        const date = new Date(r.reservation_date);
+        const dateStr = date.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
+        return `${dateStr} à ${r.reservation_time} pour ${r.number_of_guests} personne${r.number_of_guests > 1 ? "s" : ""}`;
+      }).join("; ");
 
-      if (closeMatches.length > 1) {
-        // List the reservations for disambiguation
-        const list = closeMatches.map((r: any) => {
-          const date = new Date(r.reservation_date);
-          const dateStr = date.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
-          return `${r.customer_name} - ${dateStr} à ${r.reservation_time} pour ${r.number_of_guests} personne${r.number_of_guests > 1 ? "s" : ""}`;
-        }).join("; ");
-
-        return {
-          success: false,
-          needs_clarification: true,
-          message: `J'ai trouvé plusieurs réservations similaires: ${list}. Pouvez-vous me confirmer la date de votre réservation ?`,
-        };
-      }
+      return {
+        success: false,
+        needs_clarification: true,
+        message: `J'ai trouvé plusieurs réservations au nom de ${args.customer_name}: ${list}. Laquelle souhaitez-vous modifier ?`,
+      };
     }
 
-    const reservation = validReservations[0];
+    const reservation = reservations[0];
 
     // Format date for display
     const currentDateObj = new Date(reservation.reservation_date);
