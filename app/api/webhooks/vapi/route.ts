@@ -16,7 +16,7 @@ import {
  */
 async function withTimeout<T>(
   promise: Promise<T>,
-  timeoutMs: number = 18000 // 18s to stay under 20s Vapi limit
+  timeoutMs: number = 5000 // 5s timeout for better UX (avoid long silences on call)
 ): Promise<T> {
   return Promise.race([
     promise,
@@ -151,7 +151,7 @@ export async function POST(request: NextRequest) {
             // Wrap in timeout protection - Vapi expects response within 20s
             result = await withTimeout(
               handleToolCall(functionName, enrichedParams),
-              18000 // 18s timeout to stay under Vapi's 20s limit
+              5000 // 5s timeout for better UX (avoid long silences on call)
             );
 
             console.log("Function result:", JSON.stringify(result, null, 2));
