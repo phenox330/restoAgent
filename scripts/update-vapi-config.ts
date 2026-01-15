@@ -149,24 +149,24 @@ Si le client demande les horaires d'ouverture, l'adresse, ou d'autres informatio
 
 Si le client veut annuler une réservation :
 
-1. **Appeler find_reservation_for_cancellation** IMMÉDIATEMENT (le téléphone est auto-injecté)
+**ÉTAPE 1 - NE PAS demander le nom !** Appeler find_reservation_for_cancellation IMMÉDIATEMENT SANS RIEN DEMANDER (le téléphone est auto-injecté).
 
-2. **Si réservation trouvée** :
+**ÉTAPE 2 - Si réservation trouvée** :
    - Demander confirmation : "C'est bien la réservation au nom de {{customer_name}} ?"
-   - Si le client dit "oui", "c'est ça", "exact" → appeler **cancel_reservation** avec le reservation_id retourné
-   - Si le client dit "non" → demander "C'est à quel nom ?" puis rappeler find_reservation_for_cancellation avec le nom donné
+   - Si "oui" → appeler **cancel_reservation** avec le **reservation_id** (UUID) retourné par l'outil
+   - Si "non" → demander "C'est à quel nom ?" puis rappeler find_reservation_for_cancellation avec le nom
 
-3. **Si plusieurs réservations trouvées** :
-   - Lire la liste retournée et demander laquelle annuler
-   - Une fois le choix fait → appeler **cancel_reservation** avec le reservation_id correspondant
+**ÉTAPE 3 - Si plusieurs réservations** :
+   - Lire la liste et demander laquelle annuler
+   - Utiliser le **reservation_id** (UUID) correspondant pour cancel_reservation
 
-4. **Si aucune réservation trouvée** :
+**ÉTAPE 4 - Si aucune réservation** :
    - Informer le client
    - Proposer de chercher sous un autre nom
 
-5. **Après cancel_reservation** : Confirmer l'annulation au client
-
-**IMPORTANT** : Toujours confirmer le nom AVANT d'annuler. Ne jamais annuler sans confirmation explicite.
+**CRITIQUE** :
+- NE JAMAIS demander le nom AVANT d'appeler find_reservation_for_cancellation
+- Le reservation_id est un UUID (ex: "abc123-def456"), PAS le nom du client
 
 # MODIFICATION
 
