@@ -148,14 +148,25 @@ Si le client demande les horaires d'ouverture, l'adresse, ou d'autres informatio
 # ANNULATION
 
 Si le client veut annuler une réservation :
-1. **NE PAS demander le nom ou le téléphone** - le numéro est déjà disponible automatiquement
-2. **Appeler find_and_cancel_reservation IMMÉDIATEMENT** (sans demander d'informations supplémentaires)
-3. **Lire et transmettre fidèlement le résultat** :
-   - Si annulation réussie → confirmer au client
-   - Si plusieurs réservations trouvées → lire la liste et demander laquelle annuler
-   - Si aucune réservation trouvée → informer le client
 
-Note : L'outil utilise automatiquement le numéro de téléphone de l'appel pour trouver les réservations.
+1. **Appeler find_reservation_for_cancellation** IMMÉDIATEMENT (le téléphone est auto-injecté)
+
+2. **Si réservation trouvée** :
+   - Demander confirmation : "C'est bien la réservation au nom de {{customer_name}} ?"
+   - Si le client dit "oui", "c'est ça", "exact" → appeler **cancel_reservation** avec le reservation_id retourné
+   - Si le client dit "non" → demander "C'est à quel nom ?" puis rappeler find_reservation_for_cancellation avec le nom donné
+
+3. **Si plusieurs réservations trouvées** :
+   - Lire la liste retournée et demander laquelle annuler
+   - Une fois le choix fait → appeler **cancel_reservation** avec le reservation_id correspondant
+
+4. **Si aucune réservation trouvée** :
+   - Informer le client
+   - Proposer de chercher sous un autre nom
+
+5. **Après cancel_reservation** : Confirmer l'annulation au client
+
+**IMPORTANT** : Toujours confirmer le nom AVANT d'annuler. Ne jamais annuler sans confirmation explicite.
 
 # MODIFICATION
 
@@ -282,20 +293,54 @@ const FUNCTIONS = [
     }
   },
   {
-    name: "find_and_cancel_reservation",
+    name: "find_reservation_for_cancellation",
     async: false,
-    description: "Recherche et annule une réservation. Le numéro de téléphone est automatiquement utilisé pour trouver les réservations. À appeler DIRECTEMENT sans demander d'informations au client.",
+    description: "Recherche une réservation pour annulation SANS l'annuler. Retourne les détails (nom, date, heure) pour que l'agent confirme avec le client avant d'annuler. Utilise automatiquement le téléphone de l'appel.",
     parameters: {
       type: "object",
       required: [],
       properties: {
         customer_name: {
           type: "string",
-          description: "Nom du client (optionnel - utilisé uniquement si besoin de clarifier entre plusieurs réservations)"
+          description: "Nom du client (optionnel - utilisé si le client dit que ce n'est pas sa réservation)"
         },
         customer_phone: {
           type: "string",
-          description: "Numéro de téléphone (auto-injecté depuis l'appel - ne pas demander au client)"
+          description: "Numéro de téléphone (auto-injecté depuis l'appel)"
+        }
+      }
+    }
+  },
+  {
+    name: "cancel_reservation",
+    async: false,
+    description: "Annule une réservation par son ID. À appeler UNIQUEMENT après confirmation du client via find_reservation_for_cancellation.",
+    parameters: {
+      type: "object",
+      required: ["reservation_id"],
+      properties: {
+        reservation_id: {
+          type: "string",
+          description: "L'ID unique de la réservation à annuler (obtenu via find_reservation_for_cancellation)"
+        }
+      }
+    }
+  },
+  {
+    name: "find_and_cancel_reservation",
+    async: false,
+    description: "[DEPRECATED - utiliser find_reservation_for_cancellation + cancel_reservation] Recherche et annule une réservation en une seule étape.",
+    parameters: {
+      type: "object",
+      required: [],
+      properties: {
+        customer_name: {
+          type: "string",
+          description: "Nom du client (optionnel)"
+        },
+        customer_phone: {
+          type: "string",
+          description: "Numéro de téléphone (auto-injecté)"
         }
       }
     }

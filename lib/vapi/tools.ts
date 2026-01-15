@@ -42,6 +42,12 @@ interface FindAndCancelReservationArgs {
   customer_phone?: string;
 }
 
+interface FindReservationForCancellationArgs {
+  restaurant_id: string;
+  customer_name?: string; // Optionnel - pour recherche par nom si confirmation échoue
+  customer_phone?: string; // Auto-injecté depuis l'appel
+}
+
 interface FindAndUpdateReservationArgs {
   restaurant_id: string;
   customer_name: string;
@@ -825,6 +831,157 @@ export async function handleFindAndCancelReservation(
   }
 }
 
+// Tool 5: Rechercher une réservation pour annulation (SANS annuler)
+// Retourne les détails pour confirmation par l'agent avant annulation
+export async function handleFindReservationForCancellation(
+  args: FindReservationForCancellationArgs
+) {
+  console.log("========================================");
+  console.log("🔍 find_reservation_for_cancellation called");
+  console.log("  Args received:", JSON.stringify(args, null, 2));
+
+  if (!args.restaurant_id) {
+    console.error("❌ CRITICAL: restaurant_id is missing!");
+    return {
+      success: false,
+      message: "Erreur système: impossible d'identifier le restaurant.",
+    };
+  }
+
+  if (!args.customer_phone && !args.customer_name) {
+    console.log("⚠️ No customer_phone AND no customer_name provided");
+    return {
+      success: false,
+      message: "J'ai besoin soit de votre nom, soit du numéro de téléphone.",
+    };
+  }
+
+  try {
+    let reservations: any[] = [];
+
+    // Recherche par téléphone d'abord (si disponible)
+    if (args.customer_phone) {
+      console.log("📞 Searching by phone:", args.customer_phone);
+
+      const { data, error } = await getSupabaseAdmin()
+        .from("reservations")
+        .select("*")
+        .eq("restaurant_id", args.restaurant_id)
+        .eq("customer_phone", args.customer_phone)
+        .in("status", ["pending", "confirmed"])
+        .order("reservation_date", { ascending: true })
+        .order("reservation_time", { ascending: true });
+
+      if (error) {
+        console.error("❌ Phone search error:", error);
+        return {
+          success: false,
+          message: "Erreur lors de la recherche.",
+        };
+      }
+
+      reservations = data || [];
+    }
+
+    // Si pas de résultat par téléphone et qu'on a un nom, rechercher par nom
+    if (reservations.length === 0 && args.customer_name) {
+      console.log("👤 Searching by name:", args.customer_name);
+
+      const { data, error } = await getSupabaseAdmin()
+        .from("reservations")
+        .select("*")
+        .eq("restaurant_id", args.restaurant_id)
+        .ilike("customer_name", `%${args.customer_name}%`)
+        .in("status", ["pending", "confirmed"])
+        .order("reservation_date", { ascending: true })
+        .order("reservation_time", { ascending: true });
+
+      if (error) {
+        console.error("❌ Name search error:", error);
+        return {
+          success: false,
+          message: "Erreur lors de la recherche.",
+        };
+      }
+
+      reservations = data || [];
+    }
+
+    // Aucune réservation trouvée
+    if (reservations.length === 0) {
+      console.log("⚠️ No reservation found");
+      return {
+        success: false,
+        found: false,
+        message: args.customer_name
+          ? `Aucune réservation trouvée au nom de ${args.customer_name}.`
+          : "Aucune réservation trouvée avec ce numéro de téléphone.",
+      };
+    }
+
+    // UNE seule réservation trouvée - retourner les détails pour confirmation
+    if (reservations.length === 1) {
+      const reservation = reservations[0];
+      const reservationDate = new Date(reservation.reservation_date);
+      const dateStr = reservationDate.toLocaleDateString("fr-FR", {
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+      });
+
+      console.log("✅ Found 1 reservation:", reservation.id);
+      return {
+        success: true,
+        found: true,
+        reservation_id: reservation.id,
+        customer_name: reservation.customer_name,
+        date: dateStr,
+        time: reservation.reservation_time,
+        number_of_guests: reservation.number_of_guests,
+        message: `Réservation trouvée au nom de ${reservation.customer_name} pour ${reservation.number_of_guests} personne${reservation.number_of_guests > 1 ? "s" : ""} le ${dateStr} à ${reservation.reservation_time}.`,
+      };
+    }
+
+    // PLUSIEURS réservations - lister pour clarification
+    console.log(`⚠️ Found ${reservations.length} reservations`);
+    const list = reservations.map((r: any, idx: number) => {
+      const date = new Date(r.reservation_date);
+      const dateStr = date.toLocaleDateString("fr-FR", {
+        weekday: "long",
+        day: "numeric",
+        month: "long"
+      });
+      return {
+        index: idx + 1,
+        reservation_id: r.id,
+        customer_name: r.customer_name,
+        date: dateStr,
+        time: r.reservation_time,
+        number_of_guests: r.number_of_guests,
+      };
+    });
+
+    const listStr = list.map((r: any) =>
+      `${r.index}. ${r.customer_name} - ${r.date} à ${r.time} pour ${r.number_of_guests} personne${r.number_of_guests > 1 ? "s" : ""}`
+    ).join(", ");
+
+    return {
+      success: true,
+      found: true,
+      multiple: true,
+      reservations: list,
+      message: `J'ai trouvé ${reservations.length} réservations : ${listStr}. Laquelle souhaitez-vous annuler ?`,
+    };
+
+  } catch (error) {
+    console.error("❌ EXCEPTION in find_reservation_for_cancellation:", error);
+    return {
+      success: false,
+      message: "Une erreur est survenue lors de la recherche.",
+    };
+  }
+}
+
 // Fallback pour la recherche classique (si pg_trgm n'est pas disponible)
 async function fallbackFindAndCancel(args: FindAndCancelReservationArgs) {
   console.log("📋 [FALLBACK] Fallback cancellation called");
@@ -1361,6 +1518,8 @@ export async function handleToolCall(toolName: string, args: any) {
       return handleCancelReservation(args);
     case "find_and_cancel_reservation":
       return handleFindAndCancelReservation(args);
+    case "find_reservation_for_cancellation":
+      return handleFindReservationForCancellation(args);
     case "find_and_update_reservation":
       return handleFindAndUpdateReservation(args);
     case "add_to_waitlist":
