@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -43,27 +43,39 @@ interface EditDayDialogProps {
 }
 
 function EditDayDialog({ day, schedule, open, onOpenChange, onSave }: EditDayDialogProps) {
-  const [isClosed, setIsClosed] = useState(!schedule || (!schedule.lunch && !schedule.dinner));
-  const [hasLunch, setHasLunch] = useState(!!schedule?.lunch);
-  const [hasDinner, setHasDinner] = useState(!!schedule?.dinner);
-  const [lunchStart, setLunchStart] = useState(schedule?.lunch?.start || "12:00");
-  const [lunchEnd, setLunchEnd] = useState(schedule?.lunch?.end || "14:30");
-  const [dinnerStart, setDinnerStart] = useState(schedule?.dinner?.start || "19:00");
-  const [dinnerEnd, setDinnerEnd] = useState(schedule?.dinner?.end || "22:30");
+  const [isClosed, setIsClosed] = useState(false);
+  const [hasLunch, setHasLunch] = useState(true);
+  const [hasDinner, setHasDinner] = useState(true);
+  const [lunchStart, setLunchStart] = useState("12:00");
+  const [lunchEnd, setLunchEnd] = useState("14:30");
+  const [dinnerStart, setDinnerStart] = useState("19:00");
+  const [dinnerEnd, setDinnerEnd] = useState("22:30");
 
-  // Reset state when dialog opens with new day
-  const handleOpenChange = (newOpen: boolean) => {
-    if (newOpen && day) {
-      setIsClosed(!schedule || (!schedule.lunch && !schedule.dinner));
-      setHasLunch(!!schedule?.lunch);
-      setHasDinner(!!schedule?.dinner);
-      setLunchStart(schedule?.lunch?.start || "12:00");
-      setLunchEnd(schedule?.lunch?.end || "14:30");
-      setDinnerStart(schedule?.dinner?.start || "19:00");
-      setDinnerEnd(schedule?.dinner?.end || "22:30");
+  // Reset state when dialog opens
+  useEffect(() => {
+    if (open && day) {
+      const dayIsClosed = !schedule || (!schedule.lunch && !schedule.dinner);
+      setIsClosed(dayIsClosed);
+
+      // If day is closed, default to showing both services for easy configuration
+      // If day is open, show the current configuration
+      if (dayIsClosed) {
+        setHasLunch(true);
+        setHasDinner(true);
+        setLunchStart("12:00");
+        setLunchEnd("14:30");
+        setDinnerStart("19:00");
+        setDinnerEnd("22:30");
+      } else {
+        setHasLunch(!!schedule?.lunch);
+        setHasDinner(!!schedule?.dinner);
+        setLunchStart(schedule?.lunch?.start || "12:00");
+        setLunchEnd(schedule?.lunch?.end || "14:30");
+        setDinnerStart(schedule?.dinner?.start || "19:00");
+        setDinnerEnd(schedule?.dinner?.end || "22:30");
+      }
     }
-    onOpenChange(newOpen);
-  };
+  }, [open, day, schedule]);
 
   const handleSave = () => {
     if (!day) return;
@@ -86,7 +98,7 @@ function EditDayDialog({ day, schedule, open, onOpenChange, onSave }: EditDayDia
   if (!day) return null;
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Modifier {day.label}</DialogTitle>
