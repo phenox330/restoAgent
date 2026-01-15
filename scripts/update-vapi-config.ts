@@ -165,23 +165,17 @@ Si un outil retourne un message commençant par **"ERREUR_TECHNIQUE:"**, cela si
 
 1. **Dire au client** : "Je rencontre un problème technique. Puis-je prendre vos coordonnées et le restaurant vous rappellera ?"
 
-2. **Collecter OBLIGATOIREMENT** :
+2. **Collecter** :
    - Nom du client
    - Numéro de téléphone (si pas déjà capturé automatiquement)
 
-3. **Appeler create_technical_error_request avec TOUTES les informations que tu as** :
-   - TOUJOURS passer : customer_name, customer_phone
-   - SI le client a mentionné la date AVANT l'erreur → passer "date" (format YYYY-MM-DD)
-   - SI le client a mentionné l'heure AVANT l'erreur → passer "time" (format HH:mm)
-   - SI le client a mentionné le nombre de personnes AVANT l'erreur → passer "number_of_guests"
+3. **Appeler create_technical_error_request** avec juste customer_name et customer_phone
 
-   **Exemple concret** : Si le client a dit "je voudrais réserver ce soir à 19h pour 4 personnes" AVANT que l'erreur survienne, tu DOIS passer customer_name="Dupont", customer_phone="07...", date="2026-01-15", time="19:00", number_of_guests=4
-
-4. **Confirmer au client** : "Merci, le restaurant vous contactera dans les plus brefs délais."
+4. **Confirmer au client** : "Merci, le restaurant vous contactera dans les plus brefs délais. Bonne journée !"
 
 **IMPORTANT** :
 - Ne JAMAIS mentionner les détails techniques au client (pas de "timeout", "base de données", "erreur 500", etc.). Rester vague : "problème technique".
-- Ne PAS redemander les infos que tu as déjà - passe-les directement à create_technical_error_request.
+- Les détails de la demande initiale du client sont automatiquement enregistrés dans les logs de l'appel.
 
 # CONVERSIONS
 - "ce soir" / "aujourd'hui" → date du jour
@@ -321,7 +315,7 @@ const FUNCTIONS = [
   {
     name: "create_technical_error_request",
     async: false,
-    description: "ERREUR TECHNIQUE - Enregistre les coordonnées du client suite à une erreur technique. À appeler UNIQUEMENT quand un autre outil retourne 'ERREUR_TECHNIQUE'.",
+    description: "ERREUR TECHNIQUE - Enregistre les coordonnées du client suite à une erreur technique. À appeler UNIQUEMENT quand un autre outil retourne 'ERREUR_TECHNIQUE'. Passer juste le nom et le téléphone.",
     parameters: {
       type: "object",
       required: ["customer_name", "customer_phone"],
@@ -333,22 +327,6 @@ const FUNCTIONS = [
         customer_phone: {
           type: "string",
           description: "Numéro de téléphone du client"
-        },
-        date: {
-          type: "string",
-          description: "Date souhaitée YYYY-MM-DD (optionnel - seulement si le client l'a mentionnée)"
-        },
-        time: {
-          type: "string",
-          description: "Heure souhaitée HH:mm (optionnel - seulement si le client l'a mentionnée)"
-        },
-        number_of_guests: {
-          type: "number",
-          description: "Nombre de personnes (optionnel - seulement si le client l'a mentionné)"
-        },
-        special_requests: {
-          type: "string",
-          description: "Demandes spéciales ou notes (optionnel)"
         }
       }
     }

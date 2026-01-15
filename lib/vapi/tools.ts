@@ -1151,10 +1151,6 @@ interface CreateTechnicalErrorRequestArgs {
   restaurant_id: string;
   customer_name: string;
   customer_phone: string;
-  date?: string; // Optionnel - client peut ne pas avoir spécifié avant l'erreur
-  time?: string; // Optionnel
-  number_of_guests?: number; // Optionnel
-  special_requests?: string;
   call_id?: string;
 }
 
@@ -1190,15 +1186,15 @@ export async function handleCreateTechnicalErrorRequest(
         customer_name: args.customer_name.trim(),
         customer_phone: args.customer_phone.trim(),
         customer_email: null,
-        reservation_date: args.date || null, // NULL si non spécifié
-        reservation_time: args.time || null, // NULL si non spécifié
-        number_of_guests: args.number_of_guests || 1, // 1 par défaut (contrainte DB > 0)
-        duration: 90, // Durée par défaut
-        status: "pending_request", // Statut spécial pour demandes en attente
+        reservation_date: null, // NULL - détails dans internal_notes
+        reservation_time: null, // NULL - détails dans internal_notes
+        number_of_guests: 1, // Valeur par défaut (contrainte DB > 0)
+        duration: 90,
+        status: "pending_request",
         source: "phone",
-        request_type: "technical_error", // Nouveau champ Story 1.2
-        special_requests: args.special_requests || "Demande suite à une erreur technique",
-        internal_notes: `Erreur technique survenue pendant l'appel. Client a fourni ses coordonnées pour rappel.${args.call_id ? ` Call ID: ${args.call_id}` : ""}`,
+        request_type: "technical_error",
+        special_requests: "Demande suite à une erreur technique",
+        internal_notes: `Erreur technique survenue pendant l'appel. Client a fourni ses coordonnées pour rappel. Consulter les logs de l'appel pour les détails de la demande.${args.call_id ? ` Call ID: ${args.call_id}` : ""}`,
         call_id: args.call_id || null,
       })
       .select()
@@ -1220,29 +1216,8 @@ export async function handleCreateTechnicalErrorRequest(
       errorRequest.id
     );
 
-    // Message de confirmation pour l'agent
-    let confirmationMessage = `Merci ${args.customer_name}. J'ai bien noté vos coordonnées`;
-
-    if (args.date) {
-      const dateObj = new Date(args.date);
-      const dateStr = dateObj.toLocaleDateString("fr-FR", {
-        weekday: "long",
-        year: "numeric",
-        month: "long",
-        day: "numeric",
-      });
-      confirmationMessage += ` ainsi que votre souhait de réserver pour le ${dateStr}`;
-
-      if (args.time) {
-        confirmationMessage += ` à ${args.time}`;
-      }
-
-      if (args.number_of_guests) {
-        confirmationMessage += ` pour ${args.number_of_guests} personne${args.number_of_guests > 1 ? "s" : ""}`;
-      }
-    }
-
-    confirmationMessage += `. Le restaurant vous contactera dans les plus brefs délais pour finaliser votre demande. Bonne journée !`;
+    // Message de confirmation simple
+    const confirmationMessage = `Merci ${args.customer_name}. J'ai bien noté vos coordonnées. Le restaurant vous contactera dans les plus brefs délais pour finaliser votre demande. Bonne journée !`;
 
     return {
       success: true,
