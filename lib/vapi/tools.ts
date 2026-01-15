@@ -222,6 +222,9 @@ export async function handleGetCurrentDate() {
 
 // Tool 1: Vérifier les disponibilités
 export async function handleCheckAvailability(args: CheckAvailabilityArgs) {
+  // 🧪 TEST Story 1.2 - Simuler erreur DB
+  throw new Error("Simulated database connection error");
+
   console.log(
     "🔍 check_availability called with:",
     JSON.stringify(args, null, 2)
@@ -1143,6 +1146,121 @@ export async function handleTransfer(args: TransferCallArgs) {
   return handleTransferCall(args);
 }
 
+// Tool 8: Créer une demande suite à une erreur technique (Story 1.2)
+interface CreateTechnicalErrorRequestArgs {
+  restaurant_id: string;
+  customer_name: string;
+  customer_phone: string;
+  date?: string; // Optionnel - client peut ne pas avoir spécifié avant l'erreur
+  time?: string; // Optionnel
+  number_of_guests?: number; // Optionnel
+  special_requests?: string;
+  call_id?: string;
+}
+
+export async function handleCreateTechnicalErrorRequest(
+  args: CreateTechnicalErrorRequestArgs
+) {
+  console.log(
+    "⚠️ create_technical_error_request called with:",
+    JSON.stringify(args, null, 2)
+  );
+
+  try {
+    // Valider les champs requis
+    if (!args.customer_name || args.customer_name.trim() === "") {
+      return {
+        success: false,
+        message: "Le nom du client est requis.",
+      };
+    }
+
+    if (!args.customer_phone || args.customer_phone.trim() === "") {
+      return {
+        success: false,
+        message: "Le numéro de téléphone est requis.",
+      };
+    }
+
+    // Créer l'enregistrement de type "technical_error"
+    const { data: errorRequest, error: insertError } = await getSupabaseAdmin()
+      .from("reservations")
+      .insert({
+        restaurant_id: args.restaurant_id,
+        customer_name: args.customer_name.trim(),
+        customer_phone: args.customer_phone.trim(),
+        customer_email: null,
+        reservation_date: args.date || null, // NULL si non spécifié
+        reservation_time: args.time || null, // NULL si non spécifié
+        number_of_guests: args.number_of_guests || 0,
+        duration: 90, // Durée par défaut
+        status: "pending_request", // Statut spécial pour demandes en attente
+        source: "phone",
+        request_type: "technical_error", // Nouveau champ Story 1.2
+        special_requests: args.special_requests || "Demande suite à une erreur technique",
+        internal_notes: `Erreur technique survenue pendant l'appel. Client a fourni ses coordonnées pour rappel.${args.call_id ? ` Call ID: ${args.call_id}` : ""}`,
+        call_id: args.call_id || null,
+      })
+      .select()
+      .single();
+
+    if (insertError) {
+      console.error(
+        "❌ Error creating technical error request:",
+        insertError
+      );
+      return {
+        success: false,
+        message: "Une erreur est survenue lors de l'enregistrement de votre demande.",
+      };
+    }
+
+    console.log(
+      "✅ Technical error request created:",
+      errorRequest.id
+    );
+
+    // Message de confirmation pour l'agent
+    let confirmationMessage = `Merci ${args.customer_name}. J'ai bien noté vos coordonnées`;
+
+    if (args.date) {
+      const dateObj = new Date(args.date);
+      const dateStr = dateObj.toLocaleDateString("fr-FR", {
+        weekday: "long",
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      });
+      confirmationMessage += ` ainsi que votre souhait de réserver pour le ${dateStr}`;
+
+      if (args.time) {
+        confirmationMessage += ` à ${args.time}`;
+      }
+
+      if (args.number_of_guests) {
+        confirmationMessage += ` pour ${args.number_of_guests} personne${args.number_of_guests > 1 ? "s" : ""}`;
+      }
+    }
+
+    confirmationMessage += `. Le restaurant vous contactera dans les plus brefs délais pour finaliser votre demande. Bonne journée !`;
+
+    return {
+      success: true,
+      message: confirmationMessage,
+      request_id: errorRequest.id,
+    };
+  } catch (error) {
+    console.error(
+      "❌ Exception in create_technical_error_request:",
+      error
+    );
+    return {
+      success: false,
+      message: "Une erreur est survenue. Veuillez contacter directement le restaurant.",
+    };
+  }
+}
+
 // Router pour gérer les appels de fonctions
 export async function handleToolCall(toolName: string, args: any) {
   switch (toolName) {
@@ -1164,6 +1282,8 @@ export async function handleToolCall(toolName: string, args: any) {
       return handleAddToWaitlist(args);
     case "transfer_call":
       return handleTransfer(args);
+    case "create_technical_error_request":
+      return handleCreateTechnicalErrorRequest(args);
     default:
       return {
         success: false,
