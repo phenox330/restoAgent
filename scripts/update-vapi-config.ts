@@ -414,15 +414,8 @@ const TRANSCRIBER = {
   endpointing: 500,
   smartFormat: true,
   keywords: [
-    // Chiffres français avec boost pour meilleure reconnaissance (numéros de téléphone)
-    "zéro:2", "un:2", "deux:2", "trois:2", "quatre:2",
-    "cinq:2", "six:2", "sept:2", "huit:2", "neuf:2",
-    "dix:2", "onze:2", "douze:2", "treize:2", "quatorze:2",
-    "quinze:2", "seize:2", "vingt:2", "trente:2", "quarante:2",
-    "cinquante:2", "soixante:2", "soixantedix:2",
-    "quatrevingt:2", "quatrevingdix:2", "cent:2",
-    // Mots du domaine
-    "épicurie", "réservation"
+    // Mots du domaine uniquement
+    "épicurie:3", "réservation:2", "modifier:2", "annuler:2"
   ]
 };
 
