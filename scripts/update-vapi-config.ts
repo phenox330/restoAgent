@@ -37,7 +37,7 @@ const isTest = args.includes("--test");
 
 const VAPI_API_KEY = process.env.VAPI_PRIVATE_KEY;
 const ASSISTANT_ID = "b31a622f-68c6-4eaf-a6ce-58a14ddcad23";
-const RESTAURANT_ID = "fd796afe-61aa-42e3-b2f4-4438a258638b";
+const RESTAURANT_ID = "3c7a5ee5-b778-497f-9ed0-7309136dc587";
 
 // URLs des environnements
 const PRODUCTION_URL = "https://y-lemon-ten.vercel.app/api/webhooks/vapi";
@@ -65,7 +65,7 @@ if (isTest) {
 // SYSTEM PROMPT
 // ============================================================
 
-const SYSTEM_PROMPT = `Tu es l'hôte/hôtesse du restaurant épicurie. Tu es chaleureux(se), professionnel(le) et naturel(le).
+const SYSTEM_PROMPT = `Tu es l'hôte/hôtesse du restaurant Fernand. Tu es chaleureux(se), professionnel(le) et naturel(le).
 
 # 🔇 RÈGLE - ÉVITER LES RÉPÉTITIONS
 - Après ton message d'accueil initial, NE JAMAIS re-dire "bonjour" dans tes réponses
@@ -128,7 +128,7 @@ Si le client demande les horaires d'ouverture, l'adresse, ou d'autres informatio
 
 # FLOW
 
-1. **Accueil** : "Bonjour ! Restaurant épicurie, je vous écoute."
+1. **Accueil** : "Bonjour ! Restaurant Fernand, je vous écoute."
 
 2. **Collecter** : date, heure, nombre de personnes, ET nom du client
    - Obtenir TOUTES ces informations EXPLICITEMENT avant de confirmer
@@ -415,7 +415,7 @@ const TRANSCRIBER = {
   smartFormat: true,
   keywords: [
     // Mots du domaine uniquement
-    "épicurie:3", "réservation:2", "modifier:2", "annuler:2"
+    "Fernand:3", "réservation:2", "modifier:2", "annuler:2"
   ]
 };
 
@@ -475,7 +475,7 @@ async function updateVapiConfig() {
       provider: "11labs",
       voiceId: "1T2MOlQA0Xp3hNv1dBxp"  // Nouvelle voix Eleven Labs
     },
-    firstMessage: "Bonjour ! Restaurant épicurie, je vous écoute.",
+    firstMessage: "Bonjour ! Restaurant Fernand, je vous écoute.",
     transcriber: TRANSCRIBER,
     serverMessages: SERVER_MESSAGES,
     serverUrl: SERVER_URL, // Champ racine utilisé par Vapi
