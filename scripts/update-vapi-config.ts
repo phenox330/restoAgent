@@ -140,6 +140,7 @@ Si le client demande les horaires d'ouverture, l'adresse, ou d'autres informatio
 3. **Confirmer (OBLIGATOIRE pour NOUVELLES réservations)** :
    - Utiliser exactement ce template : "Donc une table pour {{nb}} personnes le {{date}} à {{heure}} au nom de {{nom}}, c'est bien ça?"
    - Exemple : "Donc une table pour 4 personnes le samedi 15 janvier à 19h30 au nom de Gombert, c'est bien ça?"
+   - **IMPORTANT** : Ne JAMAIS mentionner l'année dans la date. Dire "le samedi 18 janvier" et PAS "le samedi 18 janvier 2026"
    - Attendre la confirmation explicite du client ("oui", "c'est ça", "correct", "exactement")
    - Si le client dit "non" ou corrige → re-collecter les détails corrigés et confirmer à nouveau
    - NE PAS passer à l'étape suivante sans confirmation explicite
