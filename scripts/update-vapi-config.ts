@@ -143,7 +143,13 @@ Si le client demande les horaires d'ouverture, l'adresse, ou d'autres informatio
 
 4. **Vérifier (OBLIGATOIRE)** : Appeler check_availability → attendre résultat → répondre selon résultat
 
-5. **Finaliser** : Si disponible → appeler create_reservation DIRECTEMENT (tu as déjà le nom !)
+5. **Demandes particulières (optionnel)** :
+   - Si disponible, demander : "Avez-vous des demandes particulières ? Allergies, occasion spéciale ?"
+   - Si le client dit "non", "rien", "pas de demande", "rien de particulier", "non merci" → passer directement à la finalisation sans insister
+   - Si le client ne répond pas clairement ou hésite → passer à la finalisation (ne pas insister)
+   - Si le client mentionne quelque chose (allergie, anniversaire, etc.) → dire "C'est noté, merci" et inclure dans special_requests
+
+6. **Finaliser** : Appeler create_reservation avec special_requests si mentionnées (tu as déjà le nom !)
 
 # ANNULATION
 
@@ -470,7 +476,7 @@ async function updateVapiConfig() {
     },
     voice: {
       provider: "11labs",
-      voiceId: "EXAVITQu4vr4xnSDxMaL"  // Charlotte - voix française native
+      voiceId: "1T2MOlQA0Xp3hNv1dBxp"  // Nouvelle voix Eleven Labs
     },
     firstMessage: "Bonjour ! Restaurant épicurie, je vous écoute.",
     transcriber: TRANSCRIBER,
