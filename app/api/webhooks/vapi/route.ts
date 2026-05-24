@@ -32,7 +32,11 @@ export async function POST(request: NextRequest) {
   console.log("📞 WEBHOOK CALLED AT:", new Date().toISOString());
   console.log("URL:", request.url);
   console.log("Method:", request.method);
-  console.log("Headers:", Object.fromEntries(request.headers.entries()));
+  console.log("Headers:", Object.fromEntries(
+    [...request.headers.entries()].map(([k, v]) =>
+      k.toLowerCase() === "x-vapi-secret" ? [k, "[REDACTED]"] : [k, v]
+    )
+  ));
 
   // Vérification de la signature webhook
   const verificationError = withVapiWebhookVerification(request);

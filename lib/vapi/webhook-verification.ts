@@ -1,40 +1,45 @@
 import { NextRequest, NextResponse } from "next/server";
+import { timingSafeEqual } from "crypto";
 
 /**
- * Vérifie la signature du webhook Vapi
- * Le header x-vapi-secret doit correspondre à VAPI_WEBHOOK_SECRET
- * 
- * TEMPORAIREMENT DÉSACTIVÉ pour debug staging
+ * Vérifie la signature du webhook Vapi.
+ * Vapi envoie le header `x-vapi-secret` (valeur = server.secret configuré sur l'assistant)
+ * qui doit correspondre à VAPI_WEBHOOK_SECRET.
+ *
+ * Politique :
+ * - Secret configuré → comparaison timing-safe obligatoire
+ * - Secret absent en production → rejet (fail-closed)
+ * - Secret absent en dev → warning + accepté (faciliter le test local)
  */
 export function verifyVapiWebhookSignature(request: NextRequest): {
   valid: boolean;
   error?: NextResponse;
 } {
-  // 🔧 TEMPORAIRE: Désactivation complète de la vérification pour debug
-  console.log("🔓 Webhook verification DISABLED for debugging");
-  console.log("   Headers received:", Object.fromEntries(request.headers.entries()));
-  return { valid: true };
-
-  /* ORIGINAL CODE - À RÉACTIVER APRÈS DEBUG
   const webhookSecret = process.env.VAPI_WEBHOOK_SECRET;
 
-  // Si pas de secret configuré, logger un warning mais accepter (dev mode)
   if (!webhookSecret) {
+    if (process.env.NODE_ENV === "production") {
+      console.error(
+        "❌ VAPI_WEBHOOK_SECRET non configuré en production — webhook rejeté"
+      );
+      return {
+        valid: false,
+        error: NextResponse.json(
+          { error: "Server misconfiguration" },
+          { status: 500 }
+        ),
+      };
+    }
     console.warn(
-      "⚠️ VAPI_WEBHOOK_SECRET non configuré - Validation de signature désactivée"
-    );
-    console.warn(
-      "   Pour sécuriser le webhook, ajoutez VAPI_WEBHOOK_SECRET dans .env.local"
+      "⚠️ VAPI_WEBHOOK_SECRET non configuré (dev) — vérification de signature désactivée"
     );
     return { valid: true };
   }
 
-  // Récupérer le secret du header
   const requestSecret = request.headers.get("x-vapi-secret");
 
-  // Vérifier si le header est présent
   if (!requestSecret) {
-    console.error("❌ Webhook signature manquante - Header x-vapi-secret absent");
+    console.error("❌ Webhook rejeté — header x-vapi-secret absent");
     return {
       valid: false,
       error: NextResponse.json(
@@ -44,11 +49,14 @@ export function verifyVapiWebhookSignature(request: NextRequest): {
     };
   }
 
-  // Comparer les secrets (timing-safe comparison serait mieux mais ok pour ce cas)
-  if (requestSecret !== webhookSecret) {
-    console.error("❌ Webhook signature invalide - Le secret ne correspond pas");
-    console.error("   Received:", requestSecret.substring(0, 8) + "...");
-    console.error("   Expected:", webhookSecret.substring(0, 8) + "...");
+  const received = Buffer.from(requestSecret);
+  const expected = Buffer.from(webhookSecret);
+
+  if (
+    received.length !== expected.length ||
+    !timingSafeEqual(received, expected)
+  ) {
+    console.error("❌ Webhook rejeté — signature invalide");
     return {
       valid: false,
       error: NextResponse.json(
@@ -58,14 +66,12 @@ export function verifyVapiWebhookSignature(request: NextRequest): {
     };
   }
 
-  console.log("✅ Webhook signature valide");
   return { valid: true };
-  */
 }
 
 /**
- * Middleware pour vérifier la signature du webhook Vapi
- * Retourne null si valide, ou une NextResponse avec erreur 401
+ * Middleware pour vérifier la signature du webhook Vapi.
+ * Retourne null si valide, ou une NextResponse avec erreur sinon.
  */
 export function withVapiWebhookVerification(
   request: NextRequest
