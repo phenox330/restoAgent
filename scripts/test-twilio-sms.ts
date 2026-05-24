@@ -89,7 +89,7 @@ async function testAllSMSTypes() {
   console.log("\n" + "=".repeat(60));
   console.log("📧 Test des différents types de SMS\n");
 
-  const restaurantName = "L'Épicurie (Test)";
+  const restaurantName = "Restaurant Fernand (Test)";
   const customerName = "Jean Test";
   const date = new Date();
   date.setDate(date.getDate() + 1); // Demain

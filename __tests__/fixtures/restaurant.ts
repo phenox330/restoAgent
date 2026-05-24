@@ -6,9 +6,9 @@ export const TEST_RESTAURANT_ID = "a0a1a251-0f2d-495a-9141-8115a10a9d77";
 
 export const mockRestaurant = {
   id: TEST_RESTAURANT_ID,
-  name: "Restaurant Épicurie",
+  name: "Restaurant Fernand",
   phone: "+33123456789",
-  email: "contact@epicurie.fr",
+  email: "contact@fernand.fr",
   address: "123 Rue de la Gastronomie, 75001 Paris",
   max_capacity_lunch: 50,
   max_capacity_dinner: 60,

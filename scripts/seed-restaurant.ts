@@ -1,5 +1,5 @@
 /**
- * Script de seed manuel pour initialiser le restaurant épicurie
+ * Script de seed manuel pour initialiser le restaurant Fernand
  *
  * Ce script crée le restaurant avec ID fixe et configuration de base.
  * Utilise SUPABASE_SERVICE_ROLE_KEY pour bypasser RLS.
@@ -16,14 +16,14 @@ const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 // Configuration du restaurant
-const RESTAURANT_ID = "fd796afe-61aa-42e3-b2f4-4438a258638b";
+const RESTAURANT_ID = "3c7a5ee5-b778-497f-9ed0-7309136dc587";
 const DEMO_USER_ID = "00000000-0000-0000-0000-000000000001"; // User ID factice pour démo
 
 const RESTAURANT_DATA = {
   id: RESTAURANT_ID,
   user_id: DEMO_USER_ID,
-  name: "épicurie",
-  email: "contact@epicurie.fr",
+  name: "Restaurant Fernand",
+  email: "contact@fernand.fr",
   phone: "+33939035450",
   address: "123 Rue de la Gastronomie, 75001 Paris",
   max_capacity: 40, // 40 couverts maximum
@@ -79,7 +79,7 @@ async function seedRestaurant() {
     process.exit(1);
   }
 
-  console.log("🌱 Seed du restaurant épicurie\n");
+  console.log("🌱 Seed du restaurant Fernand\n");
   console.log("📋 Configuration:");
   console.log(`   - Restaurant ID: ${RESTAURANT_ID}`);
   console.log(`   - Nom: ${RESTAURANT_DATA.name}`);
@@ -101,11 +101,11 @@ async function seedRestaurant() {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        email: "demo@epicurie.fr",
-        password: "demo-password-epicurie-2026",
+        email: "demo@fernand.fr",
+        password: "demo-password-fernand-2026",
         email_confirm: true,
         user_metadata: {
-          name: "Demo User Epicurie",
+          name: "Demo User Fernand",
           role: "restaurant_owner"
         }
       })
@@ -119,7 +119,7 @@ async function seedRestaurant() {
 
     // Si l'utilisateur existe déjà, récupérer son ID
     if (errorText.includes("already") || errorText.includes("exists")) {
-      console.log("   ℹ️ Utilisateur demo@epicurie.fr existe déjà, récupération de l'ID...");
+      console.log("   ℹ️ Utilisateur demo@fernand.fr existe déjà, récupération de l'ID...");
 
       // Lister les users pour trouver celui avec cet email
       const listUsersResponse = await fetch(
@@ -134,7 +134,7 @@ async function seedRestaurant() {
 
       if (listUsersResponse.ok) {
         const usersData = await listUsersResponse.json();
-        const demoUser = usersData.users?.find((u: any) => u.email === "demo@epicurie.fr");
+        const demoUser = usersData.users?.find((u: any) => u.email === "demo@fernand.fr");
 
         if (demoUser) {
           actualUserId = demoUser.id;

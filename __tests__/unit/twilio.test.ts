@@ -42,7 +42,7 @@ describe("twilio.ts", () => {
       const result = await sendConfirmationSMS({
         phone: "+33612345678",
         customerName: "Jean Dupont",
-        restaurantName: "Restaurant Épicurie",
+        restaurantName: "Restaurant Fernand",
         date: "2025-01-15",
         time: "19:30",
         guests: 4,
@@ -60,7 +60,7 @@ describe("twilio.ts", () => {
       await sendConfirmationSMS({
         phone: "0612345678", // Format français sans indicatif
         customerName: "Jean Dupont",
-        restaurantName: "Restaurant Épicurie",
+        restaurantName: "Restaurant Fernand",
         date: "2025-01-15",
         time: "19:30",
         guests: 4,
@@ -78,7 +78,7 @@ describe("twilio.ts", () => {
       await sendConfirmationSMS({
         phone: "+33612345678",
         customerName: "Jean Dupont",
-        restaurantName: "Restaurant Épicurie",
+        restaurantName: "Restaurant Fernand",
         date: "2025-01-15",
         time: "19:30",
         guests: 4,
@@ -99,7 +99,7 @@ describe("twilio.ts", () => {
       const result = await sendConfirmationSMS({
         phone: "+33612345678",
         customerName: "Jean Dupont",
-        restaurantName: "Restaurant Épicurie",
+        restaurantName: "Restaurant Fernand",
         date: "2025-01-15",
         time: "19:30",
         guests: 4,
@@ -123,7 +123,7 @@ describe("twilio.ts", () => {
       const result = await sendConfirmationSMS({
         phone: "invalid",
         customerName: "Jean Dupont",
-        restaurantName: "Restaurant Épicurie",
+        restaurantName: "Restaurant Fernand",
         date: "2025-01-15",
         time: "19:30",
         guests: 4,
@@ -140,7 +140,7 @@ describe("twilio.ts", () => {
       await sendConfirmationSMS({
         phone: "+33612345678",
         customerName: "Jean Dupont",
-        restaurantName: "Restaurant Épicurie",
+        restaurantName: "Restaurant Fernand",
         date: "2025-01-15", // Mercredi 15 janvier
         time: "19:30",
         guests: 4,
@@ -161,7 +161,7 @@ describe("twilio.ts", () => {
       const result = await sendReminderSMS({
         phone: "+33612345678",
         customerName: "Jean Dupont",
-        restaurantName: "Restaurant Épicurie",
+        restaurantName: "Restaurant Fernand",
         date: "2025-01-15",
         time: "19:30",
         guests: 4,
@@ -177,7 +177,7 @@ describe("twilio.ts", () => {
       await sendReminderSMS({
         phone: "+33612345678",
         customerName: "Jean Dupont",
-        restaurantName: "Restaurant Épicurie",
+        restaurantName: "Restaurant Fernand",
         date: "2025-01-15",
         time: "19:30",
         guests: 4,
@@ -194,7 +194,7 @@ describe("twilio.ts", () => {
 
       const result = await sendCancellationConfirmationSMS({
         phone: "+33612345678",
-        restaurantName: "Restaurant Épicurie",
+        restaurantName: "Restaurant Fernand",
         date: "2025-01-15",
         time: "19:30",
       });
@@ -208,7 +208,7 @@ describe("twilio.ts", () => {
 
       await sendCancellationConfirmationSMS({
         phone: "+33612345678",
-        restaurantName: "Restaurant Épicurie",
+        restaurantName: "Restaurant Fernand",
         date: "2025-01-15",
         time: "19:30",
       });
