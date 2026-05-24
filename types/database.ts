@@ -30,6 +30,7 @@ export interface Database {
           default_reservation_duration: number
           opening_hours: Json
           closed_dates: Json
+          vapi_phone_number_id: string | null
           created_at: string
           updated_at: string
         }
@@ -48,6 +49,7 @@ export interface Database {
           default_reservation_duration?: number
           opening_hours?: Json
           closed_dates?: Json
+          vapi_phone_number_id?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -66,6 +68,7 @@ export interface Database {
           default_reservation_duration?: number
           opening_hours?: Json
           closed_dates?: Json
+          vapi_phone_number_id?: string | null
           created_at?: string
           updated_at?: string
         }

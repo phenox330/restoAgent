@@ -108,21 +108,32 @@ export async function POST(request: NextRequest) {
             throw parseError;
           }
 
-          // Extraire le restaurant_id depuis les paramètres, la metadata de l'assistant, ou du call
-          const restaurantId =
-            parameters?.restaurant_id ||
+          // Résolution du restaurant (multi-tenant) :
+          // 1. Lookup DB par phoneNumberId du numéro Vapi appelé = source de vérité
+          // 2. Fallback metadata de l'assistant/call (rétro-compat mono-resto)
+          let restaurantId =
             message.assistant?.metadata?.restaurant_id ||
             message.call?.metadata?.restaurant_id ||
             body?.assistant?.metadata?.restaurant_id ||
-            body?.call?.metadata?.restaurant_id;
+            body?.call?.metadata?.restaurant_id ||
+            parameters?.restaurant_id;
 
-          console.log("🔍 RESTAURANT_ID EXTRACTION:");
-          console.log("  - parameters?.restaurant_id:", parameters?.restaurant_id);
-          console.log("  - message.assistant?.metadata?.restaurant_id:", message.assistant?.metadata?.restaurant_id);
-          console.log("  - message.call?.metadata?.restaurant_id:", message.call?.metadata?.restaurant_id);
-          console.log("  - body?.assistant?.metadata?.restaurant_id:", body?.assistant?.metadata?.restaurant_id);
-          console.log("  - body?.call?.metadata?.restaurant_id:", body?.call?.metadata?.restaurant_id);
-          console.log("  => FINAL restaurantId:", restaurantId);
+          const phoneNumberId =
+            message.call?.phoneNumberId || body?.call?.phoneNumberId;
+
+          if (phoneNumberId) {
+            const { data: mappedRestaurant } = await getSupabaseAdmin()
+              .from("restaurants")
+              .select("id")
+              .eq("vapi_phone_number_id", phoneNumberId)
+              .maybeSingle();
+
+            if (mappedRestaurant?.id) {
+              restaurantId = mappedRestaurant.id;
+            }
+          }
+
+          console.log("🔍 RESTAURANT_ID résolu:", restaurantId, "(phoneNumberId:", phoneNumberId, ")");
 
           // get_current_date n'a pas besoin de restaurant_id
           if (!restaurantId && functionName !== 'get_current_date') {
