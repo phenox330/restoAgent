@@ -127,7 +127,7 @@ describe("Reservation Flow Integration", () => {
       const availabilityData = await availabilityResponse.json();
 
       expect(availabilityResponse.status).toBe(200);
-      expect(availabilityData.results[0].result).toContain("disponibilité");
+      expect(availabilityData.results[0].result).toContain("disponible");
 
       // Étape 2: Créer la réservation
       const reservationPayload = createToolCallsPayload("create_reservation", {

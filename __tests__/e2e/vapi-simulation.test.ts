@@ -177,7 +177,7 @@ describe("Vapi E2E Simulation", () => {
       const checkData = await checkResponse.json();
       
       expect(checkResponse.status).toBe(200);
-      expect(checkData.results[0].result).toContain("disponibilité");
+      expect(checkData.results[0].result).toContain("disponible");
 
       // 3. Création de la réservation
       const createPayload = {
