@@ -20,7 +20,6 @@ export default async function RestaurantPage() {
       {restaurant && (
         <BotToggle
           enabled={restaurant.bot_enabled}
-          fallbackPhone={restaurant.fallback_phone}
           hasVapiNumber={!!restaurant.vapi_phone_number_id}
         />
       )}

@@ -3,8 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { restaurantSchema, type RestaurantFormData } from "./schemas";
-import { formatPhoneE164 } from "@/lib/utils/phone";
-import { VAPI_ASSISTANT_ID } from "@/lib/vapi/constants";
+import { VAPI_ASSISTANT_ID, VAPI_CLOSED_ASSISTANT_ID } from "@/lib/vapi/constants";
 
 export async function createRestaurant(data: RestaurantFormData) {
   try {
@@ -134,7 +133,7 @@ export async function setBotEnabled(enabled: boolean) {
 
     const { data: restaurant } = await supabase
       .from("restaurants")
-      .select("id, fallback_phone, vapi_phone_number_id")
+      .select("id, vapi_phone_number_id")
       .eq("user_id", user.id)
       .single();
 
@@ -149,29 +148,19 @@ export async function setBotEnabled(enabled: boolean) {
       };
     }
 
-    if (!enabled && !restaurant.fallback_phone) {
-      return {
-        error:
-          "Renseignez un numéro de transfert avant de désactiver l'agent vocal (sinon les appels ne sont pas pris).",
-      };
-    }
-
     const vapiKey = process.env.VAPI_PRIVATE_KEY;
     if (!vapiKey) {
       return { error: "Configuration vocale indisponible" };
     }
 
-    // Reconfigure le numéro Vapi : bot actif = assistant attaché,
-    // bot off = transfert direct vers le numéro de gestion manuelle.
-    const vapiBody = enabled
-      ? { assistantId: VAPI_ASSISTANT_ID, fallbackDestination: null }
-      : {
-          assistantId: null,
-          fallbackDestination: {
-            type: "number",
-            number: formatPhoneE164(restaurant.fallback_phone as string),
-          },
-        };
+    // Modèle renvoi conditionnel : le téléphone du resto sonne en premier,
+    // les appels manqués sont renvoyés vers ce numéro Vapi.
+    // ON  → assistant de réservation répond
+    // OFF → assistant "Indisponible" (message poli + raccroche)
+    const vapiBody = {
+      assistantId: enabled ? VAPI_ASSISTANT_ID : VAPI_CLOSED_ASSISTANT_ID,
+      fallbackDestination: null,
+    };
 
     const vapiResponse = await fetch(
       `https://api.vapi.ai/phone-number/${restaurant.vapi_phone_number_id}`,
