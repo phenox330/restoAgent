@@ -411,7 +411,7 @@ const TRANSCRIBER = {
   model: "nova-2",
   language: "fr",
   provider: "deepgram",
-  endpointing: 500,
+  endpointing: 300,
   smartFormat: true,
   keywords: [
     // Mots du domaine uniquement
@@ -457,6 +457,13 @@ async function updateVapiConfig() {
   console.log(`   - Keywords: ${TRANSCRIBER.keywords.length}`);
   console.log("");
 
+  const WEBHOOK_SECRET = process.env.VAPI_WEBHOOK_SECRET;
+  if (!WEBHOOK_SECRET) {
+    console.warn(
+      "⚠️  VAPI_WEBHOOK_SECRET absent de .env.local : le bloc 'server' ne sera PAS modifié (préservation du secret webhook existant)."
+    );
+  }
+
   const updatePayload = {
     model: {
       model: "gpt-4o-mini",
@@ -473,20 +480,35 @@ async function updateVapiConfig() {
     },
     voice: {
       provider: "11labs",
-      voiceId: "1T2MOlQA0Xp3hNv1dBxp"  // Nouvelle voix Eleven Labs
+      voiceId: "1T2MOlQA0Xp3hNv1dBxp",
+      model: "eleven_turbo_v2_5",
+      stability: 0.35, // intonation plus vivante
+      similarityBoost: 0.75
     },
     firstMessage: "Bonjour ! Restaurant Fernand, je vous écoute.",
     transcriber: TRANSCRIBER,
     serverMessages: SERVER_MESSAGES,
-    serverUrl: SERVER_URL, // Champ racine utilisé par Vapi
-    server: {
-      url: SERVER_URL,
-      timeoutSeconds: 20
+    startSpeakingPlan: {
+      waitSeconds: 0.4,
+      smartEndpointingPlan: { provider: "livekit" } // détection de fin de tour par IA
+    },
+    stopSpeakingPlan: {
+      numWords: 0,
+      voiceSeconds: 0.2,
+      backoffSeconds: 1.0 // barge-in : l'appelant peut couper la parole
     },
     metadata: {
       restaurant_id: RESTAURANT_ID
     },
-    backgroundSound: "office"
+    backgroundSound: "office",
+    // ⚠️ On ne modifie le bloc `server` QUE si le secret webhook est disponible,
+    // sinon on le préserve (sinon on casserait la vérification de signature).
+    ...(WEBHOOK_SECRET
+      ? {
+          serverUrl: SERVER_URL,
+          server: { url: SERVER_URL, timeoutSeconds: 20, secret: WEBHOOK_SECRET },
+        }
+      : {})
   };
 
   console.log("📤 Envoi de la mise à jour...\n");
