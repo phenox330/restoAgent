@@ -8,11 +8,10 @@ import { Bot, PhoneForwarded } from "lucide-react";
 
 interface BotToggleProps {
   enabled: boolean;
-  fallbackPhone: string | null;
   hasVapiNumber: boolean;
 }
 
-export function BotToggle({ enabled, fallbackPhone, hasVapiNumber }: BotToggleProps) {
+export function BotToggle({ enabled, hasVapiNumber }: BotToggleProps) {
   const [checked, setChecked] = useState(enabled);
   const [loading, setLoading] = useState(false);
 
@@ -31,8 +30,8 @@ export function BotToggle({ enabled, fallbackPhone, hasVapiNumber }: BotTogglePr
 
     toast.success(
       next
-        ? "Agent vocal activé — il prend les appels"
-        : "Agent vocal désactivé — les appels sont transférés"
+        ? "Agent vocal activé — il prend les appels manqués"
+        : "Agent vocal désactivé"
     );
   }
 
@@ -57,10 +56,8 @@ export function BotToggle({ enabled, fallbackPhone, hasVapiNumber }: BotTogglePr
             <h2 className="text-lg font-semibold tracking-tight">Agent vocal</h2>
             <p className="text-sm text-muted-foreground">
               {checked
-                ? "L'agent répond et gère les réservations"
-                : fallbackPhone
-                  ? `Appels transférés vers ${fallbackPhone}`
-                  : "Appels transférés (numéro de transfert requis)"}
+                ? "Répond aux appels manqués et prend les réservations"
+                : "Désactivé — les appels manqués ne sont pas pris par l'agent"}
             </p>
           </div>
         </div>
@@ -82,12 +79,13 @@ export function BotToggle({ enabled, fallbackPhone, hasVapiNumber }: BotTogglePr
         </div>
       )}
 
-      {hasVapiNumber && !fallbackPhone && (
+      {hasVapiNumber && (
         <div className="mt-4 p-4 bg-blue-50 rounded-2xl border border-blue-100">
           <p className="text-sm text-blue-800">
-            Renseignez un <span className="font-medium">numéro de transfert</span>{" "}
-            ci-dessous pour pouvoir désactiver l&apos;agent (les appels y seront
-            redirigés).
+            Votre numéro habituel sonne toujours en premier. L&apos;agent ne
+            prend que les appels que vous ne décrochez pas (renvoi sur
+            non-réponse). Désactivé, ces appels manqués reçoivent un message
+            d&apos;indisponibilité.
           </p>
         </div>
       )}
