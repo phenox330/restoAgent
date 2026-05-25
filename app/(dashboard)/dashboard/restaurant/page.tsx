@@ -1,4 +1,5 @@
 import { RestaurantForm } from "@/components/restaurant/restaurant-form";
+import { BotToggle } from "@/components/restaurant/bot-toggle";
 import { getRestaurant } from "@/lib/restaurant/actions";
 
 export default async function RestaurantPage() {
@@ -15,6 +16,14 @@ export default async function RestaurantPage() {
             : "Configurez votre restaurant pour commencer à recevoir des réservations"}
         </p>
       </div>
+
+      {restaurant && (
+        <BotToggle
+          enabled={restaurant.bot_enabled}
+          fallbackPhone={restaurant.fallback_phone}
+          hasVapiNumber={!!restaurant.vapi_phone_number_id}
+        />
+      )}
 
       <RestaurantForm restaurant={restaurant || undefined} />
     </div>
