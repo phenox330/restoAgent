@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { checkAvailability, checkDuplicateReservation, getServiceType } from "./availability";
 import { addToWaitlist, formatAlternativesMessage } from "./waitlist";
 import { sendConfirmationSMS } from "@/lib/sms/twilio";
@@ -78,7 +77,7 @@ function calculateConfidenceScore(args: CreateReservationArgs): number {
 
   // Format téléphone valide (+0.2)
   const phoneRegex = /^[0-9+\-\s()]{8,}$/;
-  if (phoneRegex.test(args.customer_phone)) {
+  if (args.customer_phone && phoneRegex.test(args.customer_phone)) {
     score += 0.2;
   }
 
@@ -318,7 +317,7 @@ export async function handleCreateReservation(args: CreateReservationArgs) {
       const waitlistResult = await addToWaitlist({
         restaurantId: args.restaurant_id,
         customerName: args.customer_name,
-        customerPhone: args.customer_phone,
+        customerPhone: args.customer_phone!,
         customerEmail: args.customer_email,
         desiredDate: args.date,
         desiredTime: args.time,
@@ -342,7 +341,7 @@ export async function handleCreateReservation(args: CreateReservationArgs) {
       console.log("📝 Checking for duplicate reservation...");
       const duplicateCheck = await checkDuplicateReservation(getSupabaseAdmin(), {
         restaurantId: args.restaurant_id,
-        customerPhone: args.customer_phone,
+        customerPhone: args.customer_phone!,
         date: args.date,
       });
 

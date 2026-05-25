@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { NextRequest, NextResponse } from "next/server";
 import { handleToolCall } from "@/lib/vapi/tools";
 import { withVapiWebhookVerification } from "@/lib/vapi/webhook-verification";
@@ -172,11 +171,17 @@ export async function POST(request: NextRequest) {
           // Pour get_current_date, retourner un objet structuré
           let finalResult;
           if (functionName === 'get_current_date' && typeof result === 'object') {
+            const dateResult = result as {
+              current_date?: string;
+              current_time?: string;
+              day_of_week?: string;
+              message?: string;
+            };
             finalResult = JSON.stringify({
-              current_date: result.current_date,
-              current_time: result.current_time,
-              day_of_week: result.day_of_week,
-              message: result.message
+              current_date: dateResult.current_date,
+              current_time: dateResult.current_time,
+              day_of_week: dateResult.day_of_week,
+              message: dateResult.message
             });
           } else if (result.message) {
             finalResult = result.message;
