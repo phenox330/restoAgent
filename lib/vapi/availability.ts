@@ -6,6 +6,16 @@ type Supabase = SupabaseClient<Database>;
 // Heure de coupure entre service midi et soir (15h00)
 const LUNCH_CUTOFF_HOUR = 15;
 
+// Marge de sécurité : on réserve une fraction de la capacité pour absorber
+// les walk-ins et les réservations prises hors-système (dérive d'état).
+// Évite que l'agent confirme une table alors que le resto est en réalité plein.
+// (Pourra devenir configurable par restaurant plus tard.)
+const CAPACITY_BUFFER_RATIO = 0.1; // 10 %
+
+function effectiveCapacity(maxCapacity: number): number {
+  return Math.floor(maxCapacity * (1 - CAPACITY_BUFFER_RATIO));
+}
+
 interface CheckAvailabilityParams {
   restaurantId: string;
   date: string; // Format: YYYY-MM-DD
@@ -154,7 +164,7 @@ export async function checkAvailability(
       0
     );
 
-    const availableCapacity = maxCapacity - totalGuests;
+    const availableCapacity = effectiveCapacity(maxCapacity) - totalGuests;
 
     if (availableCapacity < params.numberOfGuests) {
       // Chercher des alternatives si complet
@@ -257,7 +267,7 @@ async function findAlternatives(
           0
         );
 
-        const availableCapacity = maxCapacity - totalGuests;
+        const availableCapacity = effectiveCapacity(maxCapacity) - totalGuests;
 
         if (availableCapacity >= params.numberOfGuests) {
           alternatives.push({

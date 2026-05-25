@@ -111,7 +111,7 @@ describe("availability.ts", () => {
 
       expect(result.available).toBe(true);
       expect(result.serviceType).toBe("dinner");
-      expect(result.availableCapacity).toBe(60); // max_capacity_dinner
+      expect(result.availableCapacity).toBe(54); // floor(60 * 0.9) — marge walk-ins 10%
     });
 
     it("should return available=false when restaurant is not found", async () => {
@@ -200,7 +200,7 @@ describe("availability.ts", () => {
 
       expect(result.available).toBe(false);
       expect(result.reason).toContain("Capacité insuffisante");
-      expect(result.availableCapacity).toBe(4); // 60 - 56 = 4
+      expect(result.availableCapacity).toBe(0); // effectif 54 - 56 = -2 → clampé à 0
     });
 
     it("should only count reservations from the same service (lunch/dinner)", async () => {
@@ -224,7 +224,7 @@ describe("availability.ts", () => {
       });
 
       expect(result.available).toBe(true);
-      expect(result.availableCapacity).toBe(50); // 60 - 10 = 50
+      expect(result.availableCapacity).toBe(44); // effectif 54 - 10 = 44
     });
 
     it("should return alternatives when not available", async () => {
