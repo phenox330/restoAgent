@@ -17,6 +17,25 @@ export interface ErrorLogEntry {
   context?: Record<string, any>;
 }
 
+// Champs susceptibles de contenir des données personnelles (RGPD) — rédigés dans les logs.
+const PII_KEYS = new Set([
+  "customer_name",
+  "customer_phone",
+  "customer_email",
+  "name",
+  "phone",
+  "email",
+]);
+
+function redactPII(obj?: Record<string, any>): Record<string, any> | undefined {
+  if (!obj) return obj;
+  return Object.fromEntries(
+    Object.entries(obj).map(([key, value]) =>
+      PII_KEYS.has(key) && value != null ? [key, "[REDACTED]"] : [key, value]
+    )
+  );
+}
+
 /**
  * Log a technical error with full context
  *
@@ -48,11 +67,11 @@ export function logTechnicalError(entry: ErrorLogEntry): void {
   }
 
   if (logEntry.parameters) {
-    console.error("Parameters:", JSON.stringify(logEntry.parameters, null, 2));
+    console.error("Parameters:", JSON.stringify(redactPII(logEntry.parameters), null, 2));
   }
 
   if (logEntry.context) {
-    console.error("Context:", JSON.stringify(logEntry.context, null, 2));
+    console.error("Context:", JSON.stringify(redactPII(logEntry.context), null, 2));
   }
 
   if (logEntry.stack_trace) {

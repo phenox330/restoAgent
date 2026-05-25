@@ -27,17 +27,6 @@ async function withTimeout<T>(
 }
 
 export async function POST(request: NextRequest) {
-  // Log TOUT dès le début
-  console.log("========================================");
-  console.log("📞 WEBHOOK CALLED AT:", new Date().toISOString());
-  console.log("URL:", request.url);
-  console.log("Method:", request.method);
-  console.log("Headers:", Object.fromEntries(
-    [...request.headers.entries()].map(([k, v]) =>
-      k.toLowerCase() === "x-vapi-secret" ? [k, "[REDACTED]"] : [k, v]
-    )
-  ));
-
   // Vérification de la signature webhook
   const verificationError = withVapiWebhookVerification(request);
   if (verificationError) {
@@ -47,12 +36,7 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
-    console.log("✅ Body parsed successfully");
-    console.log("Vapi webhook received:", {
-      type: body.message?.type,
-      callId: body.message?.call?.id,
-      fullBody: JSON.stringify(body, null, 2),
-    });
+    console.log("Vapi webhook:", body.message?.type, "— call:", body.message?.call?.id);
 
     const message = body.message;
 
@@ -62,15 +46,6 @@ export async function POST(request: NextRequest) {
       case "tool-calls":
       case "function-call": {
         try {
-          console.log("🔥🔥🔥 TOOL-CALLS REÇU 🔥🔥🔥");
-          console.log("=== TOOL-CALLS START ===");
-          console.log("Raw tool-calls message:", JSON.stringify(message, null, 2));
-          console.log("🔍 DEBUG - Cherche restaurant_id dans:");
-          console.log("  - message.assistant:", JSON.stringify(message.assistant, null, 2));
-          console.log("  - message.call:", JSON.stringify(message.call, null, 2));
-          console.log("  - body.assistant:", JSON.stringify(body.assistant, null, 2));
-          console.log("  - body.call:", JSON.stringify(body.call, null, 2));
-
           // Support des deux formats (ancien et nouveau)
           const toolCalls = message.toolCalls || (message.functionCall ? [{ function: message.functionCall }] : []);
 
@@ -81,10 +56,8 @@ export async function POST(request: NextRequest) {
 
           // Gérer le premier tool call (pour l'instant)
           const toolCall = toolCalls[0];
-          console.log("Tool call object:", JSON.stringify(toolCall, null, 2));
-
           const functionName = toolCall.function?.name;
-          console.log("Function name:", functionName);
+          console.log("Tool call:", functionName);
 
           let parameters;
 
@@ -100,11 +73,8 @@ export async function POST(request: NextRequest) {
             } else {
               parameters = toolCall.function?.parameters;
             }
-            console.log("Parsed parameters:", JSON.stringify(parameters, null, 2));
           } catch (parseError) {
-            console.error("ERROR parsing arguments:", parseError);
-            console.log("Raw arguments:", toolCall.function?.arguments);
-            console.log("Type of arguments:", typeof toolCall.function?.arguments);
+            console.error("Erreur parsing arguments:", parseError);
             throw parseError;
           }
 
@@ -156,10 +126,8 @@ export async function POST(request: NextRequest) {
             ...(!parameters?.customer_phone && twilioPhone && { customer_phone: twilioPhone }),
           };
 
-          console.log("Enriched params:", JSON.stringify(enrichedParams, null, 2));
-
           // Exécuter la fonction avec timeout protection (Story 1.2)
-          console.log("Calling handleToolCall for:", functionName);
+          console.log("handleToolCall:", functionName);
           let result;
 
           try {
@@ -168,8 +136,6 @@ export async function POST(request: NextRequest) {
               handleToolCall(functionName, enrichedParams),
               5000 // 5s timeout for better UX (avoid long silences on call)
             );
-
-            console.log("Function result:", JSON.stringify(result, null, 2));
           } catch (functionError) {
             // Log the technical error with full context (Story 1.2)
             const errorType = getErrorType(functionError);
@@ -193,10 +159,7 @@ export async function POST(request: NextRequest) {
             // The SYSTEM_PROMPT will instruct the agent to capture customer info
             const gracefulErrorMessage = createGracefulErrorResponse(functionName);
 
-            console.log("=== RETURNING ERROR TO VAPI (GRACEFUL) ===");
-            console.log("Tool Call ID:", toolCall.id);
-            console.log("Error Response:", gracefulErrorMessage);
-            console.log("=== END ===");
+            console.log("Réponse d'erreur gracieuse renvoyée pour:", functionName);
 
             return NextResponse.json({
               results: [{
@@ -222,11 +185,6 @@ export async function POST(request: NextRequest) {
           } else {
             finalResult = JSON.stringify(result);
           }
-
-          console.log("=== RETURNING TO VAPI ===");
-          console.log("Tool Call ID:", toolCall.id);
-          console.log("Result:", finalResult);
-          console.log("=== END ===");
 
           return NextResponse.json({
             results: [{
@@ -272,19 +230,12 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        console.log("=== CALL STARTED ===");
-        console.log("Call ID:", message.call?.id);
-        console.log("Event type:", message.type);
-        console.log("Status:", message.status);
+        console.log("Call started:", message.call?.id, "— type:", message.type);
 
         // Récupérer le restaurant_id (depuis call metadata OU assistant metadata)
         const restaurantId =
           message.call?.metadata?.restaurant_id ||
           message.assistant?.metadata?.restaurant_id;
-
-        console.log("Restaurant ID trouvé:", restaurantId);
-        console.log("Call metadata:", message.call?.metadata);
-        console.log("Assistant metadata:", message.assistant?.metadata);
 
         if (!restaurantId) {
           console.error("❌ RESTAURANT_ID MANQUANT - Appel non enregistré");
@@ -345,7 +296,7 @@ export async function POST(request: NextRequest) {
 
       // Transcription en temps réel
       case "transcript": {
-        console.log("📝 Transcript:", message.transcript || message);
+        // Non loggé : le transcript contient des données personnelles (RGPD)
         return NextResponse.json({ received: true });
       }
 
