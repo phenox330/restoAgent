@@ -163,7 +163,7 @@ describe("tools.ts", () => {
 
       expect(result.success).toBe(true);
       expect(result.available).toBe(true);
-      expect(result.message).toContain("disponibilité");
+      expect(result.message).toContain("disponible");
     });
 
     it("should return available=false when restaurant not found", async () => {

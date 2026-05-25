@@ -242,15 +242,10 @@ export async function handleCheckAvailability(args: CheckAvailabilityArgs) {
   console.log("🔍 check_availability result:", JSON.stringify(result, null, 2));
 
   if (result.available) {
-    // Format de date en français
-    const dateObj = new Date(args.date);
-    const jourNom = JOURS_FR.FULL[dateObj.getDay()];
-    const serviceLabel =
-      result.serviceType === "lunch" ? "pour le déjeuner" : "pour le dîner";
-
+    // Message bref : les détails ont déjà été récapitulés à la confirmation
     return {
       success: true,
-      message: `Oui, nous avons de la disponibilité pour ${args.number_of_guests} ${args.number_of_guests === 1 ? "personne" : "personnes"} le ${jourNom} ${args.date} à ${args.time} ${serviceLabel}.`,
+      message: "Oui, c'est disponible !",
       available: true,
       serviceType: result.serviceType,
     };
