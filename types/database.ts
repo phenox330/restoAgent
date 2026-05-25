@@ -31,6 +31,7 @@ export interface Database {
           opening_hours: Json
           closed_dates: Json
           vapi_phone_number_id: string | null
+          bot_enabled: boolean
           created_at: string
           updated_at: string
         }
@@ -50,6 +51,7 @@ export interface Database {
           opening_hours?: Json
           closed_dates?: Json
           vapi_phone_number_id?: string | null
+          bot_enabled?: boolean
           created_at?: string
           updated_at?: string
         }
@@ -69,6 +71,7 @@ export interface Database {
           opening_hours?: Json
           closed_dates?: Json
           vapi_phone_number_id?: string | null
+          bot_enabled?: boolean
           created_at?: string
           updated_at?: string
         }
