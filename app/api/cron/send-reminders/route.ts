@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { NextRequest, NextResponse } from "next/server";
 import { sendReminderSMS } from "@/lib/sms/twilio";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -84,7 +83,7 @@ export async function GET(request: NextRequest) {
 
     // Envoyer les rappels un par un
     for (const reservation of reservations) {
-      const restaurant = reservation.restaurants as { name: string; sms_enabled: boolean } | null;
+      const restaurant = reservation.restaurants as unknown as { name: string; sms_enabled: boolean } | null;
 
       // Vérifier que le restaurant a activé les SMS
       if (!restaurant?.sms_enabled) {

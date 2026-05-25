@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { NextRequest, NextResponse } from "next/server";
 import { sendCancellationConfirmationSMS } from "@/lib/sms/twilio";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";

@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * Module de transfert d'appel vers humain (Human Fallback)
  * Gère les conditions de transfert et l'appel à l'API Vapi

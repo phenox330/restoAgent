@@ -75,6 +75,7 @@ export interface Database {
           created_at?: string
           updated_at?: string
         }
+        Relationships: []
       }
       reservations: {
         Row: {
@@ -143,6 +144,7 @@ export interface Database {
           created_at?: string
           updated_at?: string
         }
+        Relationships: []
       }
       calls: {
         Row: {
@@ -187,6 +189,7 @@ export interface Database {
           ended_at?: string | null
           created_at?: string
         }
+        Relationships: []
       }
       waitlist: {
         Row: {
@@ -240,6 +243,7 @@ export interface Database {
           created_at?: string
           updated_at?: string
         }
+        Relationships: []
       }
     }
     Views: {
@@ -267,6 +271,7 @@ export interface Database {
           restaurant_name: string
           restaurant_user_id: string
         }
+        Relationships: []
       }
       reservation_stats: {
         Row: {
@@ -278,6 +283,7 @@ export interface Database {
           completed_count: number
           avg_guests: number
         }
+        Relationships: []
       }
       reservations_needs_confirmation: {
         Row: {
@@ -303,6 +309,7 @@ export interface Database {
           restaurant_name: string
           restaurant_user_id: string
         }
+        Relationships: []
       }
       waitlist_active: {
         Row: {
@@ -324,6 +331,7 @@ export interface Database {
           restaurant_name: string
           restaurant_user_id: string
         }
+        Relationships: []
       }
     }
     Functions: {
@@ -390,6 +398,16 @@ export interface Database {
           available_capacity: number
         }[]
       }
+    }
+    Enums: {
+      reservation_status: ReservationStatus
+      reservation_source: ReservationSource
+      call_status: CallStatus
+      waitlist_status: WaitlistStatus
+      request_type: 'reservation' | 'technical_error' | 'complex_request'
+    }
+    CompositeTypes: {
+      [_ in never]: never
     }
   }
 }

@@ -1,4 +1,3 @@
-// @ts-nocheck
 import type { Database } from "@/types/database";
 import type { WaitlistStatus } from "@/types";
 import { getServiceType } from "./availability";
