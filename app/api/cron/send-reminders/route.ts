@@ -14,10 +14,20 @@ import type { Database } from "@/types/database";
 export async function GET(request: NextRequest) {
   try {
     // Vérifier l'authentification Vercel Cron
+    const cronSecret = process.env.CRON_SECRET;
     const authHeader = request.headers.get("authorization");
-    if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-      // En développement, permettre l'accès sans auth
-      if (process.env.NODE_ENV === "production") {
+
+    if (process.env.NODE_ENV === "production") {
+      // Fail closed : si le secret n'est pas configuré, on refuse tout
+      // (sinon `Bearer undefined` passerait et l'endpoint SMS serait ouvert).
+      if (!cronSecret) {
+        console.error("❌ CRON_SECRET non configuré en production");
+        return NextResponse.json(
+          { error: "Server misconfiguration" },
+          { status: 500 }
+        );
+      }
+      if (authHeader !== `Bearer ${cronSecret}`) {
         console.log("❌ Unauthorized cron request");
         return NextResponse.json(
           { error: "Unauthorized" },

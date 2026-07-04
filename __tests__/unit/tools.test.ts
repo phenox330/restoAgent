@@ -20,6 +20,9 @@ let mockConfig = {
   reservations: [] as any[],
   hasDuplicate: false,
   callExists: false,
+  // Lignes renvoyées par un UPDATE ... .select() (ex. annulation scoping tenant).
+  // Non vide = une réservation annulable a été trouvée et mise à jour.
+  updatedRows: [{ id: "res-123-456-789" }] as any[],
 };
 
 // Mock Supabase AVANT tout import de tools
@@ -36,9 +39,18 @@ vi.mock("@supabase/supabase-js", () => ({
             }),
           })),
         })),
-        update: vi.fn(() => ({
-          eq: vi.fn().mockResolvedValue({ data: null, error: null }),
-        })),
+        update: vi.fn(() => {
+          // Chaînable : update().eq().eq().in().select() résout vers updatedRows.
+          const updateChain: any = {
+            eq: vi.fn(() => updateChain),
+            in: vi.fn(() => updateChain),
+            select: vi.fn().mockResolvedValue({
+              data: mockConfig.updatedRows,
+              error: null,
+            }),
+          };
+          return updateChain;
+        }),
         eq: vi.fn(() => chainable),
         in: vi.fn(() => chainable),
         or: vi.fn(() => chainable),
@@ -108,8 +120,9 @@ describe("tools.ts", () => {
       reservations: [],
       hasDuplicate: false,
       callExists: false,
+      updatedRows: [{ id: "res-123-456-789" }],
     };
-    
+
     // Mock Twilio fetch response
     mockFetch = vi.fn().mockResolvedValue({
       ok: true,
@@ -315,11 +328,26 @@ describe("tools.ts", () => {
   describe("handleCancelReservation", () => {
     it("should cancel reservation successfully", async () => {
       const result = await handleCancelReservation({
+        restaurant_id: TEST_RESTAURANT_ID,
         reservation_id: "res-123-456-789",
       });
 
       expect(result.success).toBe(true);
       expect(result.message).toContain("annulée");
+    });
+
+    it("should fail when no active reservation matches the tenant", async () => {
+      // Aucune ligne mise à jour = réservation inexistante, déjà terminale,
+      // ou appartenant à un autre restaurant (scoping tenant).
+      setupMockConfig({ updatedRows: [] });
+
+      const result = await handleCancelReservation({
+        restaurant_id: TEST_RESTAURANT_ID,
+        reservation_id: "res-does-not-exist",
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.message).toContain("Aucune réservation");
     });
   });
 

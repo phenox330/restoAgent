@@ -1,7 +1,7 @@
 import { checkAvailability, checkDuplicateReservation, getServiceType } from "./availability";
 import { addToWaitlist, formatAlternativesMessage } from "./waitlist";
 import { sendConfirmationSMS } from "@/lib/sms/twilio";
-import { JOURS_FR, MOIS_FR } from "@/lib/utils/date-fr";
+import { JOURS_FR, MOIS_FR, TIMEZONE } from "@/lib/utils/date-fr";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import type { Database } from "@/types/database";
 
@@ -32,6 +32,7 @@ interface CreateReservationArgs {
 }
 
 interface CancelReservationArgs {
+  restaurant_id: string;
   reservation_id: string;
 }
 
@@ -193,24 +194,48 @@ export async function handleGetCurrentDate() {
 
   const now = new Date();
 
-  // Calculer quelques dates utiles
-  const tomorrow = new Date(now);
-  tomorrow.setDate(tomorrow.getDate() + 1);
+  // Le serveur (Vercel) tourne en UTC : on doit dériver la date/heure dans le
+  // fuseau du restaurant, sinon après ~22h Paris l'agent croit être "hier".
+  const parisYmd = new Intl.DateTimeFormat("en-CA", {
+    timeZone: TIMEZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(now); // "YYYY-MM-DD" (jour calendaire à Paris)
+  const parisTime = new Intl.DateTimeFormat("en-GB", {
+    timeZone: TIMEZONE,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(now); // "HH:mm"
 
-  const nextWeek = new Date(now);
-  nextWeek.setDate(nextWeek.getDate() + 7);
+  // Ancre à midi UTC du jour calendaire parisien : évite les bascules DST et
+  // permet de dériver jour de semaine et décalages de façon sûre.
+  const anchor = new Date(`${parisYmd}T12:00:00Z`);
+  const ymd = (d: Date) => d.toISOString().split("T")[0];
+
+  const tomorrow = new Date(anchor);
+  tomorrow.setUTCDate(anchor.getUTCDate() + 1);
+
+  const nextWeek = new Date(anchor);
+  nextWeek.setUTCDate(anchor.getUTCDate() + 7);
+
+  const year = Number(parisYmd.slice(0, 4));
+  const dayOfMonth = Number(parisYmd.slice(8, 10));
+  const monthIndex = Number(parisYmd.slice(5, 7)) - 1;
 
   const result = {
     success: true,
-    message: `Nous sommes le ${JOURS_FR.FULL[now.getDay()]} ${now.getDate()} ${MOIS_FR.FULL[now.getMonth()]} ${now.getFullYear()}`,
-    current_date: now.toISOString().split("T")[0], // Format YYYY-MM-DD
-    current_time: now.toTimeString().split(" ")[0].substring(0, 5), // Format HH:mm
-    day_of_week: JOURS_FR.FULL[now.getDay()],
-    tomorrow_date: tomorrow.toISOString().split("T")[0],
-    tomorrow_day: JOURS_FR.FULL[tomorrow.getDay()],
-    next_week_date: nextWeek.toISOString().split("T")[0],
-    year: now.getFullYear(),
+    message: `Nous sommes le ${JOURS_FR.FULL[anchor.getUTCDay()]} ${dayOfMonth} ${MOIS_FR.FULL[monthIndex]} ${year}`,
+    current_date: parisYmd, // Format YYYY-MM-DD
+    current_time: parisTime, // Format HH:mm
+    day_of_week: JOURS_FR.FULL[anchor.getUTCDay()],
+    tomorrow_date: ymd(tomorrow),
+    tomorrow_day: JOURS_FR.FULL[tomorrow.getUTCDay()],
+    next_week_date: ymd(nextWeek),
+    year,
     full_datetime: now.toLocaleString("fr-FR", {
+      timeZone: TIMEZONE,
       weekday: "long",
       year: "numeric",
       month: "long",
@@ -514,10 +539,16 @@ export async function handleCreateReservation(args: CreateReservationArgs) {
     // Format de date en français pour le message
     const dateObj = new Date(args.date);
     const jourNom = JOURS_FR.FULL[dateObj.getDay()];
+    const partySize = `${args.number_of_guests} ${args.number_of_guests === 1 ? "personne" : "personnes"}`;
 
-    let confirmationMessage = `Parfait ! Votre réservation est confirmée pour ${args.number_of_guests} ${args.number_of_guests === 1 ? "personne" : "personnes"} le ${jourNom} ${args.date} à ${args.time}.`;
+    // La ligne a été enregistrée en `pending` quand needsConfirmation est vrai :
+    // ne pas annoncer "confirmée", sinon le client croit sa table réservée alors
+    // qu'elle nécessite une validation manuelle du restaurant.
+    let confirmationMessage = needsConfirmation
+      ? `J'enregistre votre demande de réservation pour ${partySize} le ${jourNom} ${args.date} à ${args.time}. Le restaurant vous confirmera dans les meilleurs délais.`
+      : `Parfait ! Votre réservation est confirmée pour ${partySize} le ${jourNom} ${args.date} à ${args.time}.`;
 
-    if (restaurant?.sms_enabled && args.customer_phone) {
+    if (!needsConfirmation && restaurant?.sms_enabled && args.customer_phone) {
       confirmationMessage +=
         " Vous allez recevoir un SMS de confirmation avec un lien pour annuler si besoin.";
     }
@@ -551,16 +582,30 @@ export async function handleCancelReservation(args: CancelReservationArgs) {
   );
 
   try {
-    const { error } = await getSupabaseAdmin()
+    // Scoping tenant obligatoire (client service-role = RLS bypassée) + garde
+    // sur le statut : on ne "ré-annule" pas une réservation terminale, et on
+    // n'annule jamais la réservation d'un autre restaurant.
+    const { data: updated, error } = await getSupabaseAdmin()
       .from("reservations")
       .update({ status: "cancelled" })
-      .eq("id", args.reservation_id);
+      .eq("id", args.reservation_id)
+      .eq("restaurant_id", args.restaurant_id)
+      .in("status", ["pending", "confirmed"])
+      .select("id");
 
     if (error) {
       console.error("❌ Database error:", error);
       return {
         success: false,
         message: `Erreur lors de l'annulation: ${error.message}`,
+      };
+    }
+
+    if (!updated || updated.length === 0) {
+      console.log("⚠️ Aucune réservation annulable trouvée:", args.reservation_id);
+      return {
+        success: false,
+        message: "Aucune réservation active à annuler n'a été trouvée.",
       };
     }
 

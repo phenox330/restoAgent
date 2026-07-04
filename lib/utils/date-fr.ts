@@ -3,6 +3,10 @@
  * Centralise toutes les constantes et fonctions de formatage
  */
 
+// Fuseau horaire de référence de l'application (restaurants français).
+// Le serveur tourne en UTC : toute dérivation de "jour courant" doit passer par ce fuseau.
+export const TIMEZONE = "Europe/Paris";
+
 // Constantes pour les jours de la semaine
 export const JOURS_FR = {
   FULL: ["dimanche", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi"] as const,

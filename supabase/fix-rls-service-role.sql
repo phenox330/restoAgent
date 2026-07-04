@@ -1,19 +1,27 @@
--- ⚠️ EXECUTE CES COMMANDES DANS SUPABASE SQL EDITOR
+-- ⚠️ OBSOLÈTE — NE PAS EXÉCUTER
+--
+-- Ce fichier créait des policies RLS basées sur `auth.uid() IS NULL` pour
+-- "détecter le service role". C'était FAUX et DANGEREUX : `auth.uid()` est
+-- également NULL pour toute requête anonyme faite avec la clé publique
+-- NEXT_PUBLIC_SUPABASE_ANON_KEY (livrée au navigateur). Ces policies donnaient
+-- donc à n'importe qui le droit de créer/modifier les réservations de TOUS les
+-- restaurants via l'API REST publique.
+--
+-- Le service role bypasse RLS nativement : il n'a besoin d'aucune policy.
+--
+-- Les policies ont été supprimées par la migration
+-- supabase/migrations/00009_fix_audit_security.sql
+--
+-- Contenu original conservé ci-dessous, commenté, à titre d'historique uniquement.
 
--- IMPORTANT: auth.role() retourne NULL pour le service role
--- On détecte le service role avec auth.uid() IS NULL
-
--- Supprimer les anciennes policies incorrectes
-DROP POLICY IF EXISTS "Service role can update all reservations" ON reservations;
-DROP POLICY IF EXISTS "Service role can insert all reservations" ON reservations;
-
--- Policy 1: Permet au service role de modifier les réservations
-CREATE POLICY "Service role can update all reservations"
-  ON reservations FOR UPDATE
-  USING (auth.uid() IS NULL)
-  WITH CHECK (auth.uid() IS NULL);
-
--- Policy 2: Permet au service role de créer des réservations
-CREATE POLICY "Service role can insert all reservations"
-  ON reservations FOR INSERT
-  WITH CHECK (auth.uid() IS NULL);
+-- DROP POLICY IF EXISTS "Service role can update all reservations" ON reservations;
+-- DROP POLICY IF EXISTS "Service role can insert all reservations" ON reservations;
+--
+-- CREATE POLICY "Service role can update all reservations"
+--   ON reservations FOR UPDATE
+--   USING (auth.uid() IS NULL)
+--   WITH CHECK (auth.uid() IS NULL);
+--
+-- CREATE POLICY "Service role can insert all reservations"
+--   ON reservations FOR INSERT
+--   WITH CHECK (auth.uid() IS NULL);

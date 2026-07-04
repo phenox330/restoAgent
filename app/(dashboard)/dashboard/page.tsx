@@ -49,10 +49,10 @@ export default async function DashboardPage() {
             <div className="text-2xl font-bold">{stats.todayReservations}</div>
             <p className="text-xs text-muted-foreground">
               {stats.todayReservations === 0
-                ? "Aucune réservation aujourd&apos;hui"
+                ? "Aucune réservation aujourd'hui"
                 : stats.todayReservations === 1
-                ? "1 réservation aujourd&apos;hui"
-                : `${stats.todayReservations} réservations aujourd&apos;hui`}
+                ? "1 réservation aujourd'hui"
+                : `${stats.todayReservations} réservations aujourd'hui`}
             </p>
           </CardContent>
         </Card>
