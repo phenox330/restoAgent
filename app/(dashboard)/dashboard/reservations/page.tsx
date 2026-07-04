@@ -28,6 +28,7 @@ export default async function ReservationsPage({ searchParams }: ReservationsPag
 
   const reservations = result.data || [];
   const needsConfirmationCount = needsConfirmationResult.count;
+  const hasError = Boolean(result.error);
 
   return (
     <div className="space-y-6">
@@ -35,7 +36,9 @@ export default async function ReservationsPage({ searchParams }: ReservationsPag
         <div>
           <h1 className="text-3xl font-bold">Réservations</h1>
           <p className="text-muted-foreground">
-            Gérez toutes vos réservations ({reservations.length})
+            {hasError
+              ? "Impossible de charger vos réservations"
+              : `Gérez toutes vos réservations (${reservations.length})`}
           </p>
         </div>
 
@@ -52,7 +55,14 @@ export default async function ReservationsPage({ searchParams }: ReservationsPag
 
       <ReservationsFilters />
 
-      {restaurantId ? (
+      {hasError ? (
+        <div className="flex items-center gap-2 px-4 py-3 bg-destructive/10 border border-destructive/20 rounded-lg text-destructive">
+          <AlertCircle className="h-5 w-5 shrink-0" />
+          <span className="text-sm">
+            Une erreur est survenue lors du chargement des réservations. Rafraîchissez la page ou réessayez dans un instant.
+          </span>
+        </div>
+      ) : restaurantId ? (
         <ReservationsPageClient
           initialReservations={reservations}
           restaurantId={restaurantId}

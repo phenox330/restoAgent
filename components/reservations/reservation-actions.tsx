@@ -41,6 +41,7 @@ export function ReservationActions({ reservation }: ReservationActionsProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
 
   async function handleStatusChange(status: Reservation["status"]) {
@@ -54,6 +55,7 @@ export function ReservationActions({ reservation }: ReservationActionsProps) {
         notifyConfirmationSuccess();
       } else if (status === "cancelled") {
         notifyCancellationSuccess();
+        setCancelDialogOpen(false);
       }
       router.refresh();
     }
@@ -112,7 +114,7 @@ export function ReservationActions({ reservation }: ReservationActionsProps) {
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" disabled={loading}>
+            <Button variant="ghost" size="icon" disabled={loading} aria-label="Actions sur la réservation">
               <MoreVertical className="h-4 w-4" />
             </Button>
           </DropdownMenuTrigger>
@@ -152,7 +154,10 @@ export function ReservationActions({ reservation }: ReservationActionsProps) {
                   <X className="mr-2 h-4 w-4" />
                   Non présenté
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => handleStatusChange("cancelled")}>
+                <DropdownMenuItem
+                  onClick={() => setCancelDialogOpen(true)}
+                  className="text-destructive focus:text-destructive"
+                >
                   <X className="mr-2 h-4 w-4" />
                   Annuler
                 </DropdownMenuItem>
@@ -193,6 +198,34 @@ export function ReservationActions({ reservation }: ReservationActionsProps) {
               disabled={loading}
             >
               {loading ? "Suppression..." : "Supprimer"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Annuler la réservation</DialogTitle>
+            <DialogDescription>
+              Êtes-vous sûr de vouloir annuler cette réservation ? Le créneau
+              sera libéré et le client considéré comme annulé.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setCancelDialogOpen(false)}
+              disabled={loading}
+            >
+              Retour
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => handleStatusChange("cancelled")}
+              disabled={loading}
+            >
+              {loading ? "Annulation..." : "Annuler la réservation"}
             </Button>
           </DialogFooter>
         </DialogContent>
