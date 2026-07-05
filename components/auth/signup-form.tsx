@@ -12,6 +12,7 @@ import { signupSchema } from "@/lib/auth/schemas";
 export function SignupForm() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [confirmationEmail, setConfirmationEmail] = useState<string | null>(null);
 
   async function handleSubmit(formData: FormData) {
     setLoading(true);
@@ -37,7 +38,38 @@ export function SignupForm() {
     if (result?.error) {
       setError(result.error);
       setLoading(false);
+    } else if (result?.needsEmailConfirmation) {
+      setConfirmationEmail(result.email ?? data.email);
+      setLoading(false);
     }
+  }
+
+  if (confirmationEmail) {
+    return (
+      <Card>
+        <CardHeader className="space-y-1">
+          <CardTitle className="text-2xl">Vérifiez votre email</CardTitle>
+          <CardDescription>
+            Un email de confirmation vient d&apos;être envoyé à{" "}
+            <span className="font-medium text-foreground">{confirmationEmail}</span>.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Cliquez sur le lien dans cet email pour activer votre compte, puis
+            connectez-vous. Pensez à vérifier vos spams.
+          </p>
+        </CardContent>
+        <CardFooter>
+          <Link
+            href="/login"
+            className="text-sm text-primary hover:underline"
+          >
+            Retour à la connexion
+          </Link>
+        </CardFooter>
+      </Card>
+    );
   }
 
   return (
@@ -61,6 +93,7 @@ export function SignupForm() {
               id="email"
               name="email"
               type="email"
+              autoComplete="email"
               placeholder="nom@exemple.com"
               required
               disabled={loading}
@@ -72,6 +105,7 @@ export function SignupForm() {
               id="password"
               name="password"
               type="password"
+              autoComplete="new-password"
               placeholder="Au moins 6 caractères"
               required
               disabled={loading}
@@ -83,6 +117,7 @@ export function SignupForm() {
               id="confirmPassword"
               name="confirmPassword"
               type="password"
+              autoComplete="new-password"
               required
               disabled={loading}
             />

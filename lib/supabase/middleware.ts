@@ -32,15 +32,21 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
+  const { pathname } = request.nextUrl
+  const isAuthPage = pathname.startsWith('/login') || pathname.startsWith('/signup')
+
   // Protection des routes dashboard si non authentifié
-  if (
-    !user &&
-    !request.nextUrl.pathname.startsWith('/login') &&
-    !request.nextUrl.pathname.startsWith('/api') &&
-    request.nextUrl.pathname.startsWith('/dashboard')
-  ) {
+  if (!user && !pathname.startsWith('/api') && pathname.startsWith('/dashboard')) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
+    return NextResponse.redirect(url)
+  }
+
+  // Utilisateur déjà connecté : le renvoyer vers le dashboard depuis les pages
+  // d'authentification (login / signup).
+  if (user && isAuthPage) {
+    const url = request.nextUrl.clone()
+    url.pathname = '/dashboard'
     return NextResponse.redirect(url)
   }
 

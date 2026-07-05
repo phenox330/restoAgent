@@ -234,7 +234,7 @@ export function ReservationDetailsDialog({
                 </div>
                 <div className="flex items-center gap-3">
                   <Clock className="h-4 w-4 text-gray-400" />
-                  <span>{reservation.reservation_time}</span>
+                  <span>{reservation.reservation_time.slice(0, 5)}</span>
                 </div>
                 <div className="flex items-center gap-3">
                   <Users className="h-4 w-4 text-gray-400" />

@@ -149,7 +149,7 @@ function ReservationRow({
       className={`hover:bg-muted/50 ${isNew ? "new-reservation" : ""}`}
     >
       <TableCell className="font-medium">{formattedDate}</TableCell>
-      <TableCell>{reservation.reservation_time}</TableCell>
+      <TableCell>{reservation.reservation_time.slice(0, 5)}</TableCell>
       <TableCell>
         <div className="flex items-center gap-2">
           <div>

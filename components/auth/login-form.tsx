@@ -47,6 +47,7 @@ export function LoginForm() {
               id="email"
               name="email"
               type="email"
+              autoComplete="email"
               placeholder="nom@exemple.com"
               required
               disabled={loading}
@@ -58,6 +59,7 @@ export function LoginForm() {
               id="password"
               name="password"
               type="password"
+              autoComplete="current-password"
               required
               disabled={loading}
             />

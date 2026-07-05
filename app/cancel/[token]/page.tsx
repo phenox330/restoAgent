@@ -175,7 +175,7 @@ export default function CancelReservationPage() {
                 </div>
                 <div className="flex items-center gap-3">
                   <Clock className="h-5 w-5 text-gray-400" />
-                  <span>{reservation.reservation_time}</span>
+                  <span>{reservation.reservation_time.slice(0, 5)}</span>
                 </div>
                 <div className="flex items-center gap-3">
                   <Users className="h-5 w-5 text-gray-400" />
@@ -216,7 +216,7 @@ export default function CancelReservationPage() {
                 <div className="flex items-center gap-3">
                   <Clock className="h-5 w-5 text-gray-400" />
                   <span className="line-through text-gray-400">
-                    {reservation.reservation_time}
+                    {reservation.reservation_time.slice(0, 5)}
                   </span>
                 </div>
                 <div className="flex items-center gap-3">
@@ -260,7 +260,7 @@ export default function CancelReservationPage() {
               </div>
               <div className="flex items-center gap-3">
                 <Clock className="h-5 w-5 text-gray-400" />
-                <span>{reservation.reservation_time}</span>
+                <span>{reservation.reservation_time.slice(0, 5)}</span>
               </div>
               <div className="flex items-center gap-3">
                 <Users className="h-5 w-5 text-gray-400" />

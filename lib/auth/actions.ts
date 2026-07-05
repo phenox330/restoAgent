@@ -31,10 +31,17 @@ export async function signup(formData: FormData) {
     password: formData.get("password") as string,
   };
 
-  const { error } = await supabase.auth.signUp(data);
+  const { data: result, error } = await supabase.auth.signUp(data);
 
   if (error) {
     return { error: error.message };
+  }
+
+  // Si la confirmation d'email est activée, signUp ne crée pas de session :
+  // ne pas rediriger vers le dashboard (l'utilisateur n'est pas connecté),
+  // mais demander de confirmer son email.
+  if (!result.session) {
+    return { needsEmailConfirmation: true, email: data.email };
   }
 
   revalidatePath("/", "layout");
