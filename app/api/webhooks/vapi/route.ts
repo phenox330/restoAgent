@@ -30,6 +30,140 @@ async function withTimeout<T>(
   ]);
 }
 
+interface VapiToolCall {
+  id?: string;
+  function?: {
+    name?: string;
+    arguments?: string | Record<string, unknown>;
+    parameters?: Record<string, unknown>;
+  };
+}
+
+interface ToolCallContext {
+  baseRestaurantId: string | undefined;
+  twilioPhone: string | undefined;
+  callId: string | undefined;
+  eventType: string;
+}
+
+/**
+ * Exécute un tool call et renvoie son résultat associé à son toolCallId.
+ *
+ * Isolé du reste de la boucle pour que Vapi puisse envoyer plusieurs tool
+ * calls dans un même message : chacun est traité indépendamment et une erreur
+ * sur l'un n'empêche pas les autres de répondre. Ne rejette jamais — toute
+ * erreur est convertie en réponse gracieuse pour le toolCallId concerné.
+ */
+async function executeToolCall(
+  toolCall: VapiToolCall,
+  ctx: ToolCallContext
+): Promise<{ toolCallId: string | undefined; result: string }> {
+  const toolCallId = toolCall.id;
+  const functionName = toolCall.function?.name;
+
+  try {
+    if (!functionName) {
+      return { toolCallId, result: "Erreur: nom de fonction manquant" };
+    }
+
+    // Les arguments peuvent être une string JSON ou déjà un objet
+    let parameters: Record<string, unknown> | undefined;
+    const rawArgs = toolCall.function?.arguments;
+    if (rawArgs) {
+      parameters =
+        typeof rawArgs === "string"
+          ? (JSON.parse(rawArgs) as Record<string, unknown>)
+          : rawArgs;
+    } else {
+      parameters = toolCall.function?.parameters;
+    }
+
+    // restaurant_id : source de vérité résolue au niveau message, fallback sur
+    // les paramètres du tool call (rétro-compat mono-resto).
+    const restaurantId =
+      ctx.baseRestaurantId ?? (parameters?.restaurant_id as string | undefined);
+
+    // get_current_date n'a pas besoin de restaurant_id
+    if (!restaurantId && functionName !== "get_current_date") {
+      console.log("ERROR: restaurant_id manquant pour fonction:", functionName);
+      return { toolCallId, result: "Erreur: restaurant_id manquant" };
+    }
+
+    const enrichedParams = {
+      ...parameters,
+      ...(restaurantId && { restaurant_id: restaurantId }),
+      call_id: ctx.callId,
+      // Injecter le numéro Twilio si disponible et non déjà fourni
+      ...(!parameters?.customer_phone &&
+        ctx.twilioPhone && { customer_phone: ctx.twilioPhone }),
+    };
+
+    console.log("handleToolCall:", functionName);
+
+    let result;
+    try {
+      // Timeout protection — Vapi attend une réponse sous ~20s
+      result = await withTimeout(handleToolCall(functionName, enrichedParams), 5000);
+    } catch (functionError) {
+      logTechnicalError({
+        timestamp: new Date().toISOString(),
+        error_type: getErrorType(functionError),
+        error_message:
+          functionError instanceof Error
+            ? functionError.message
+            : String(functionError),
+        stack_trace:
+          functionError instanceof Error ? functionError.stack : undefined,
+        call_id: ctx.callId,
+        function_name: functionName,
+        parameters: enrichedParams,
+        restaurant_id: restaurantId,
+        context: {
+          event_type: ctx.eventType,
+          tool_call_id: toolCallId,
+        },
+      });
+
+      // Réponse gracieuse : le SYSTEM_PROMPT demande à l'agent de capturer les
+      // infos client pour un rappel.
+      console.log("Réponse d'erreur gracieuse renvoyée pour:", functionName);
+      return { toolCallId, result: createGracefulErrorResponse(functionName) };
+    }
+
+    // Pour get_current_date, renvoyer un objet structuré
+    let finalResult: string;
+    if (functionName === "get_current_date" && typeof result === "object") {
+      const dateResult = result as {
+        current_date?: string;
+        current_time?: string;
+        day_of_week?: string;
+        message?: string;
+      };
+      finalResult = JSON.stringify({
+        current_date: dateResult.current_date,
+        current_time: dateResult.current_time,
+        day_of_week: dateResult.day_of_week,
+        message: dateResult.message,
+      });
+    } else if (result && typeof result === "object" && "message" in result && result.message) {
+      finalResult = String(result.message);
+    } else if (typeof result === "string") {
+      finalResult = result;
+    } else {
+      finalResult = JSON.stringify(result);
+    }
+
+    return { toolCallId, result: finalResult };
+  } catch (toolCallError) {
+    // Ex. JSON.parse invalide : ne pas faire échouer les autres tool calls.
+    console.error("Erreur lors du traitement du tool call:", functionName, toolCallError);
+    return {
+      toolCallId,
+      result: createGracefulErrorResponse(functionName ?? ""),
+    };
+  }
+}
+
 export async function POST(request: NextRequest) {
   // Vérification de la signature webhook
   const verificationError = withVapiWebhookVerification(request);
@@ -58,39 +192,15 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ received: true });
           }
 
-          // Gérer le premier tool call (pour l'instant)
-          const toolCall = toolCalls[0];
-          const functionName = toolCall.function?.name;
-          console.log("Tool call:", functionName);
-
-          let parameters;
-
-          try {
-            // Les arguments peuvent être soit une string JSON, soit déjà un objet
-            const args = toolCall.function?.arguments;
-            if (args) {
-              if (typeof args === 'string') {
-                parameters = JSON.parse(args);
-              } else {
-                parameters = args; // Déjà un objet
-              }
-            } else {
-              parameters = toolCall.function?.parameters;
-            }
-          } catch (parseError) {
-            console.error("Erreur parsing arguments:", parseError);
-            throw parseError;
-          }
-
-          // Résolution du restaurant (multi-tenant) :
+          // Résolution du restaurant (multi-tenant), une fois par message car
+          // identique pour tous les tool calls :
           // 1. Lookup DB par phoneNumberId du numéro Vapi appelé = source de vérité
           // 2. Fallback metadata de l'assistant/call (rétro-compat mono-resto)
-          let restaurantId =
+          let baseRestaurantId: string | undefined =
             message.assistant?.metadata?.restaurant_id ||
             message.call?.metadata?.restaurant_id ||
             body?.assistant?.metadata?.restaurant_id ||
-            body?.call?.metadata?.restaurant_id ||
-            parameters?.restaurant_id;
+            body?.call?.metadata?.restaurant_id;
 
           const phoneNumberId =
             message.call?.phoneNumberId || body?.call?.phoneNumberId;
@@ -103,105 +213,31 @@ export async function POST(request: NextRequest) {
               .maybeSingle();
 
             if (mappedRestaurant?.id) {
-              restaurantId = mappedRestaurant.id;
+              baseRestaurantId = mappedRestaurant.id;
             }
           }
 
-          console.log("🔍 RESTAURANT_ID résolu:", restaurantId, "(phoneNumberId:", phoneNumberId, ")");
+          console.log("🔍 RESTAURANT_ID résolu:", baseRestaurantId, "(phoneNumberId:", phoneNumberId, ")");
 
-          // get_current_date n'a pas besoin de restaurant_id
-          if (!restaurantId && functionName !== 'get_current_date') {
-            console.log("ERROR: restaurant_id manquant pour fonction:", functionName);
-            return NextResponse.json({
-              results: [{
-                toolCallId: toolCall.id,
-                result: "Erreur: restaurant_id manquant",
-              }]
-            });
-          }
-
-          // Ajouter le restaurant_id et le numéro Twilio aux paramètres si disponibles
-          const twilioPhone = message.call?.customer?.number;
-          const enrichedParams = {
-            ...parameters,
-            ...(restaurantId && { restaurant_id: restaurantId }),
-            call_id: message.call?.id,
-            // Injecter automatiquement le numéro Twilio si disponible et non déjà fourni
-            ...(!parameters?.customer_phone && twilioPhone && { customer_phone: twilioPhone }),
+          const ctx: ToolCallContext = {
+            baseRestaurantId,
+            twilioPhone: message.call?.customer?.number,
+            callId: message.call?.id,
+            eventType: message.type,
           };
 
-          // Exécuter la fonction avec timeout protection (Story 1.2)
-          console.log("handleToolCall:", functionName);
-          let result;
+          // Traiter TOUS les tool calls et renvoyer un résultat par toolCallId.
+          // Vapi peut en envoyer plusieurs dans un même message ; n'en traiter
+          // qu'un seul laissait les autres sans réponse et bloquait l'appel.
+          // Exécution en parallèle : la capacité est sérialisée en base par
+          // create_reservation_atomic (verrou), donc aucun risque de course.
+          const results = await Promise.all(
+            (toolCalls as VapiToolCall[]).map((toolCall) =>
+              executeToolCall(toolCall, ctx)
+            )
+          );
 
-          try {
-            // Wrap in timeout protection - Vapi expects response within 20s
-            result = await withTimeout(
-              handleToolCall(functionName, enrichedParams),
-              5000 // 5s timeout for better UX (avoid long silences on call)
-            );
-          } catch (functionError) {
-            // Log the technical error with full context (Story 1.2)
-            const errorType = getErrorType(functionError);
-
-            logTechnicalError({
-              timestamp: new Date().toISOString(),
-              error_type: errorType,
-              error_message: functionError instanceof Error ? functionError.message : String(functionError),
-              stack_trace: functionError instanceof Error ? functionError.stack : undefined,
-              call_id: message.call?.id,
-              function_name: functionName,
-              parameters: enrichedParams,
-              restaurant_id: restaurantId,
-              context: {
-                event_type: message.type,
-                tool_call_id: toolCall.id,
-              },
-            });
-
-            // Return graceful error response that triggers agent fallback
-            // The SYSTEM_PROMPT will instruct the agent to capture customer info
-            const gracefulErrorMessage = createGracefulErrorResponse(functionName);
-
-            console.log("Réponse d'erreur gracieuse renvoyée pour:", functionName);
-
-            return NextResponse.json({
-              results: [{
-                toolCallId: toolCall.id,
-                result: gracefulErrorMessage,
-              }]
-            });
-          }
-
-          // Pour get_current_date, retourner un objet structuré
-          let finalResult;
-          if (functionName === 'get_current_date' && typeof result === 'object') {
-            const dateResult = result as {
-              current_date?: string;
-              current_time?: string;
-              day_of_week?: string;
-              message?: string;
-            };
-            finalResult = JSON.stringify({
-              current_date: dateResult.current_date,
-              current_time: dateResult.current_time,
-              day_of_week: dateResult.day_of_week,
-              message: dateResult.message
-            });
-          } else if (result.message) {
-            finalResult = result.message;
-          } else if (typeof result === 'string') {
-            finalResult = result;
-          } else {
-            finalResult = JSON.stringify(result);
-          }
-
-          return NextResponse.json({
-            results: [{
-              toolCallId: toolCall.id,
-              result: finalResult,
-            }]
-          });
+          return NextResponse.json({ results });
         } catch (toolCallError) {
           console.error("=== ERROR in tool-calls handler ===");
           console.error("Error:", toolCallError);

@@ -10,6 +10,7 @@ import { mockReservation } from "../fixtures/reservations";
 import {
   createToolCallsPayload,
   createFunctionCallPayload,
+  createMultiToolCallsPayload,
   TEST_CALL_ID,
   TEST_TOOL_CALL_ID,
   callStartedPayload,
@@ -184,6 +185,56 @@ describe("Vapi Webhook Integration", () => {
       // get_current_date returns a JSON string
       const result = JSON.parse(data.results[0].result);
       expect(result.current_date).toBeDefined();
+    });
+
+    it("should answer EVERY tool call when Vapi sends several in one message", async () => {
+      // Régression : le webhook ne traitait que toolCalls[0], laissant les
+      // autres sans réponse (appel bloqué). Chaque toolCallId doit recevoir
+      // un résultat.
+      const payload = createMultiToolCallsPayload([
+        { id: "tc-1", name: "get_current_date", args: {} },
+        {
+          id: "tc-2",
+          name: "check_availability",
+          args: { date: "2025-01-15", time: "19:30", number_of_guests: 4 },
+        },
+      ]);
+
+      const request = createMockRequest(payload);
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data.results).toHaveLength(2);
+      const ids = data.results.map((r: { toolCallId: string }) => r.toolCallId);
+      expect(ids).toContain("tc-1");
+      expect(ids).toContain("tc-2");
+      for (const r of data.results) {
+        expect(r.result).toBeDefined();
+      }
+    });
+
+    it("should isolate a failing tool call without dropping the others", async () => {
+      // Un tool call inconnu ne doit pas empêcher les autres de répondre.
+      const payload = createMultiToolCallsPayload([
+        { id: "tc-ok", name: "get_current_date", args: {} },
+        { id: "tc-bad", name: "unknown_function", args: {} },
+      ]);
+
+      const request = createMockRequest(payload);
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data.results).toHaveLength(2);
+      const byId = Object.fromEntries(
+        data.results.map((r: { toolCallId: string; result: string }) => [
+          r.toolCallId,
+          r.result,
+        ])
+      );
+      expect(JSON.parse(byId["tc-ok"]).current_date).toBeDefined();
+      expect(byId["tc-bad"]).toContain("inconnue");
     });
   });
 
