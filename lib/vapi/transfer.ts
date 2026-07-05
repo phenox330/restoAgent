@@ -5,6 +5,7 @@
 
 import type { Database } from "@/types/database";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
+import { redactPII } from "@/lib/logger";
 
 // Seuils pour déclenchement du transfert
 const TRANSFER_THRESHOLDS = {
@@ -258,7 +259,7 @@ export async function handleTransferCall(args: {
   guest_count?: number;
   failed_attempts?: number;
 }) {
-  console.log("🔄 transfer_call called with:", JSON.stringify(args, null, 2));
+  console.log("🔄 transfer_call called with:", JSON.stringify(redactPII(args), null, 2));
 
   const result = await initiateTransfer({
     restaurantId: args.restaurant_id,

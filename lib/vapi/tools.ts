@@ -7,6 +7,7 @@ import {
 import { addToWaitlist, formatAlternativesMessage } from "./waitlist";
 import { sendConfirmationSMS } from "@/lib/sms/twilio";
 import { JOURS_FR, MOIS_FR, TIMEZONE } from "@/lib/utils/date-fr";
+import { redactPII, redactName, redactPhone } from "@/lib/logger";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import type { Database } from "@/types/database";
 
@@ -114,7 +115,7 @@ interface GetRestaurantInfoArgs {
 }
 
 export async function handleGetRestaurantInfo(args: GetRestaurantInfoArgs) {
-  console.log("🏪 get_restaurant_info called with:", JSON.stringify(args, null, 2));
+  console.log("🏪 get_restaurant_info called with:", JSON.stringify(redactPII(args), null, 2));
 
   try {
     const { data: restaurant, error } = await getSupabaseAdmin()
@@ -259,7 +260,7 @@ export async function handleGetCurrentDate() {
 export async function handleCheckAvailability(args: CheckAvailabilityArgs) {
   console.log(
     "🔍 check_availability called with:",
-    JSON.stringify(args, null, 2)
+    JSON.stringify(redactPII(args), null, 2)
   );
 
   const result = await checkAvailability(getSupabaseAdmin(), {
@@ -310,7 +311,7 @@ export async function handleCheckAvailability(args: CheckAvailabilityArgs) {
 export async function handleCreateReservation(args: CreateReservationArgs) {
   console.log(
     "📝 create_reservation called with:",
-    JSON.stringify(args, null, 2)
+    JSON.stringify(redactPII(args), null, 2)
   );
 
 
@@ -654,7 +655,7 @@ export async function handleCreateReservation(args: CreateReservationArgs) {
 export async function handleCancelReservation(args: CancelReservationArgs) {
   console.log(
     "❌ cancel_reservation called with:",
-    JSON.stringify(args, null, 2)
+    JSON.stringify(redactPII(args), null, 2)
   );
 
   try {
@@ -705,9 +706,9 @@ export async function handleFindAndCancelReservation(
 ) {
   console.log("========================================");
   console.log("🔍 find_and_cancel_reservation called");
-  console.log("  Args received:", JSON.stringify(args, null, 2));
-  console.log("  customer_name:", args.customer_name, "(type:", typeof args.customer_name, ")");
-  console.log("  customer_phone:", args.customer_phone, "(type:", typeof args.customer_phone, ")");
+  console.log("  Args received:", JSON.stringify(redactPII(args), null, 2));
+  console.log("  customer_name:", redactName(args.customer_name), "(type:", typeof args.customer_name, ")");
+  console.log("  customer_phone:", redactPhone(args.customer_phone), "(type:", typeof args.customer_phone, ")");
   console.log("  restaurant_id:", args.restaurant_id, "(type:", typeof args.restaurant_id, ")");
 
   // Vérification immédiate des args critiques
@@ -730,7 +731,7 @@ export async function handleFindAndCancelReservation(
   try {
     // Si on a SEULEMENT le téléphone (pas de nom), recherche directe
     if (!args.customer_name && args.customer_phone) {
-      console.log("📞 Direct phone search:", args.customer_phone);
+      console.log("📞 Direct phone search:", redactPhone(args.customer_phone));
 
       const { data: reservations, error: searchError } = await getSupabaseAdmin()
         .from("reservations")
@@ -750,7 +751,7 @@ export async function handleFindAndCancelReservation(
       }
 
       if (!reservations || reservations.length === 0) {
-        console.log("⚠️ No reservation found for phone:", args.customer_phone);
+        console.log("⚠️ No reservation found for phone:", redactPhone(args.customer_phone));
         return {
           success: false,
           message: "Aucune réservation trouvée avec ce numéro de téléphone. Avez-vous peut-être réservé sous un autre nom ou numéro ?",
@@ -847,11 +848,11 @@ export async function handleFindAndCancelReservation(
 
       console.log("🔍 Cancel search results:", reservations?.length || 0, "total,", validReservations.length, "valid matches");
       if (reservations?.length > 0) {
-        console.log("🔍 Best match:", reservations[0].customer_name, "score:", reservations[0].similarity_score);
+        console.log("🔍 Best match:", redactName(reservations[0].customer_name), "score:", reservations[0].similarity_score);
       }
 
       if (validReservations.length === 0) {
-        console.log("⚠️ No reservation found for:", args.customer_name);
+        console.log("⚠️ No reservation found for:", redactName(args.customer_name));
         return {
           success: false,
           message: `Aucune réservation trouvée au nom de ${args.customer_name}. La réservation a peut-être déjà été annulée ou le nom ne correspond pas exactement.`,
@@ -938,7 +939,7 @@ export async function handleFindAndCancelReservation(
     console.error("  Error:", error);
     console.error("  Error message:", error instanceof Error ? error.message : String(error));
     console.error("  Error stack:", error instanceof Error ? error.stack : "N/A");
-    console.error("  Args at time of error:", JSON.stringify(args, null, 2));
+    console.error("  Args at time of error:", JSON.stringify(redactPII(args), null, 2));
     return {
       success: false,
       message: "Une erreur est survenue lors de la recherche et l'annulation",
@@ -953,7 +954,7 @@ export async function handleFindReservationForCancellation(
 ) {
   console.log("========================================");
   console.log("🔍 find_reservation_for_cancellation called");
-  console.log("  Args received:", JSON.stringify(args, null, 2));
+  console.log("  Args received:", JSON.stringify(redactPII(args), null, 2));
 
   if (!args.restaurant_id) {
     console.error("❌ CRITICAL: restaurant_id is missing!");
@@ -976,7 +977,7 @@ export async function handleFindReservationForCancellation(
 
     // Recherche par téléphone d'abord (si disponible)
     if (args.customer_phone) {
-      console.log("📞 Searching by phone:", args.customer_phone);
+      console.log("📞 Searching by phone:", redactPhone(args.customer_phone));
 
       const { data, error } = await getSupabaseAdmin()
         .from("reservations")
@@ -1000,7 +1001,7 @@ export async function handleFindReservationForCancellation(
 
     // Si pas de résultat par téléphone et qu'on a un nom, rechercher par nom
     if (reservations.length === 0 && args.customer_name) {
-      console.log("👤 Searching by name:", args.customer_name);
+      console.log("👤 Searching by name:", redactName(args.customer_name));
 
       const { data, error } = await getSupabaseAdmin()
         .from("reservations")
@@ -1189,7 +1190,7 @@ export async function handleFindAndUpdateReservation(
 ) {
   console.log(
     "✏️ find_and_update_reservation called with:",
-    JSON.stringify(args, null, 2)
+    JSON.stringify(redactPII(args), null, 2)
   );
 
   try {
@@ -1210,11 +1211,11 @@ export async function handleFindAndUpdateReservation(
       };
     }
 
-    console.log("🔍 Search for:", args.customer_name, "-> Found:", reservations?.length || 0, "reservations");
+    console.log("🔍 Search for:", redactName(args.customer_name), "-> Found:", reservations?.length || 0, "reservations");
 
     // Pas de réservation trouvée = pas de réservation
     if (!reservations || reservations.length === 0) {
-      console.log("⚠️ No reservation found for:", args.customer_name);
+      console.log("⚠️ No reservation found for:", redactName(args.customer_name));
       return {
         success: false,
         reservation_found: false,
@@ -1474,7 +1475,7 @@ interface AddToWaitlistArgs {
 }
 
 export async function handleAddToWaitlist(args: AddToWaitlistArgs) {
-  console.log("📋 add_to_waitlist called with:", JSON.stringify(args, null, 2));
+  console.log("📋 add_to_waitlist called with:", JSON.stringify(redactPII(args), null, 2));
 
   const result = await addToWaitlist({
     restaurantId: args.restaurant_id,
@@ -1503,7 +1504,7 @@ interface TransferCallArgs {
 }
 
 export async function handleTransfer(args: TransferCallArgs) {
-  console.log("🔄 transfer_call called with:", JSON.stringify(args, null, 2));
+  console.log("🔄 transfer_call called with:", JSON.stringify(redactPII(args), null, 2));
   return handleTransferCall(args);
 }
 
@@ -1520,7 +1521,7 @@ export async function handleCreateTechnicalErrorRequest(
 ) {
   console.log(
     "⚠️ create_technical_error_request called with:",
-    JSON.stringify(args, null, 2)
+    JSON.stringify(redactPII(args), null, 2)
   );
 
   try {

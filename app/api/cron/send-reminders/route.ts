@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sendReminderSMS } from "@/lib/sms/twilio";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
+import { redactPhone } from "@/lib/logger";
 import type { Database } from "@/types/database";
 
 /**
@@ -103,7 +104,7 @@ export async function GET(request: NextRequest) {
       }
 
       try {
-        console.log(`📱 Sending reminder to ${reservation.customer_phone} for reservation ${reservation.id}`);
+        console.log(`📱 Sending reminder to ${redactPhone(reservation.customer_phone)} for reservation ${reservation.id}`);
 
         const smsResult = await sendReminderSMS({
           phone: reservation.customer_phone,
