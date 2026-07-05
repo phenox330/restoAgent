@@ -18,6 +18,7 @@ const createMockSupabase = (options: {
   reservations?: any[];
   reservationsError?: any;
   duplicateReservation?: any;
+  duplicateError?: any;
 } = {}) => {
   const {
     restaurant = mockRestaurant,
@@ -25,6 +26,7 @@ const createMockSupabase = (options: {
     reservations = [],
     reservationsError = null,
     duplicateReservation = null,
+    duplicateError = null,
   } = options;
 
   return {
@@ -46,9 +48,13 @@ const createMockSupabase = (options: {
             then: (resolve: any) => resolve({ data: reservations, error: reservationsError }),
           }),
           limit: vi.fn().mockReturnThis(),
-          single: vi.fn().mockResolvedValue({ 
-            data: duplicateReservation, 
-            error: duplicateReservation ? null : { code: "PGRST116" } 
+          single: vi.fn().mockResolvedValue({
+            data: duplicateReservation,
+            error: duplicateReservation ? null : { code: "PGRST116" }
+          }),
+          maybeSingle: vi.fn().mockResolvedValue({
+            data: duplicateReservation,
+            error: duplicateError,
           }),
         };
         // Make all methods chainable
@@ -59,9 +65,14 @@ const createMockSupabase = (options: {
           ...chainableMock,
           then: (resolve: any) => resolve({ data: reservations, error: reservationsError }),
         }));
-        chainableMock.single = vi.fn().mockResolvedValue({ 
-          data: duplicateReservation, 
-          error: duplicateReservation ? null : { code: "PGRST116" } 
+        chainableMock.single = vi.fn().mockResolvedValue({
+          data: duplicateReservation,
+          error: duplicateReservation ? null : { code: "PGRST116" }
+        });
+        // maybeSingle : 0 ligne n'est PAS une erreur (contrairement à single)
+        chainableMock.maybeSingle = vi.fn().mockResolvedValue({
+          data: duplicateReservation,
+          error: duplicateError,
         });
         return chainableMock;
       }
@@ -279,6 +290,25 @@ describe("availability.ts", () => {
 
       expect(result.hasDuplicate).toBe(false);
       expect(result.existingReservation).toBeUndefined();
+      expect(result.checkFailed).toBeUndefined();
+    });
+
+    it("should flag checkFailed on a real DB error instead of pretending there is no duplicate", async () => {
+      const mockSupabase = createMockSupabase({
+        duplicateReservation: null,
+        duplicateError: { code: "XX000", message: "connection failure" },
+      });
+
+      const result = await checkDuplicateReservation(mockSupabase, {
+        restaurantId: TEST_RESTAURANT_ID,
+        customerPhone: "+33699999999",
+        date: "2025-01-25",
+      });
+
+      // Une panne n'est PAS "pas de doublon" : le flag permet à l'appelant
+      // de s'appuyer explicitement sur l'index unique DB.
+      expect(result.hasDuplicate).toBe(false);
+      expect(result.checkFailed).toBe(true);
     });
   });
 });

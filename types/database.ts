@@ -96,6 +96,7 @@ export interface Database {
           confidence_score: number
           needs_confirmation: boolean
           cancellation_token: string
+          idempotency_key: string | null
           reminder_sent_at: string | null
           created_at: string
           updated_at: string
@@ -118,6 +119,7 @@ export interface Database {
           confidence_score?: number
           needs_confirmation?: boolean
           cancellation_token?: string
+          idempotency_key?: string | null
           reminder_sent_at?: string | null
           created_at?: string
           updated_at?: string
@@ -140,6 +142,7 @@ export interface Database {
           confidence_score?: number
           needs_confirmation?: boolean
           cancellation_token?: string
+          idempotency_key?: string | null
           reminder_sent_at?: string | null
           created_at?: string
           updated_at?: string
@@ -151,7 +154,7 @@ export interface Database {
           id: string
           restaurant_id: string
           vapi_call_id: string | null
-          phone_number: string
+          phone_number: string | null
           duration: number | null
           status: CallStatus
           transcript: string | null
@@ -165,7 +168,7 @@ export interface Database {
           id?: string
           restaurant_id: string
           vapi_call_id?: string | null
-          phone_number: string
+          phone_number?: string | null
           duration?: number | null
           status?: CallStatus
           transcript?: string | null
@@ -179,7 +182,7 @@ export interface Database {
           id?: string
           restaurant_id?: string
           vapi_call_id?: string | null
-          phone_number?: string
+          phone_number?: string | null
           duration?: number | null
           status?: CallStatus
           transcript?: string | null
@@ -365,6 +368,30 @@ export interface Database {
           reservation_time: string
           number_of_guests: number
           status: ReservationStatus
+        }[]
+      }
+      create_reservation_atomic: {
+        Args: {
+          p_restaurant_id: string
+          p_customer_name: string
+          p_customer_phone: string
+          p_date: string
+          p_time: string
+          p_number_of_guests: number
+          p_customer_email?: string | null
+          p_special_requests?: string | null
+          p_status?: ReservationStatus
+          p_source?: ReservationSource
+          p_confidence_score?: number
+          p_needs_confirmation?: boolean
+          p_call_id?: string | null
+          p_idempotency_key?: string | null
+          p_capacity_buffer_ratio?: number
+        }
+        Returns: {
+          reservation_id: string
+          reservation_cancellation_token: string
+          was_created: boolean
         }[]
       }
       get_service_capacity: {

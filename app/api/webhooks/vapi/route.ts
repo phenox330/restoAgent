@@ -12,6 +12,11 @@ import {
 /**
  * Wrapper to execute function with timeout protection
  * Vapi expects responses within 20 seconds
+ *
+ * ATTENTION : le timeout rejette mais N'ANNULE PAS la promesse — un INSERT
+ * lent peut aboutir en arrière-plan après la réponse d'erreur. C'est la clé
+ * d'idempotence de create_reservation_atomic (call + créneau) qui rend ce
+ * scénario inoffensif : le retry renvoie la réservation déjà créée.
  */
 async function withTimeout<T>(
   promise: Promise<T>,
@@ -215,27 +220,23 @@ export async function POST(request: NextRequest) {
       // Début d'appel
       case "call-started":
       case "status-update": {
-        // Pour status-update, vérifier si c'est un appel qui démarre
-        if (message.type === "status-update") {
-          // Ignorer les status-update qui ne sont pas "in-progress" ou au début
-          if (message.status !== "in-progress" && message.status !== "queued") {
-            return NextResponse.json({ received: true });
-          }
-
-          // Vérifier si l'appel existe déjà en base pour éviter les doublons
-          const { data: existingCall } = await getSupabaseAdmin()
-            .from("calls")
-            .select("id")
-            .eq("vapi_call_id", message.call?.id)
-            .single();
-
-          if (existingCall) {
-            // Appel déjà enregistré, ignorer
-            return NextResponse.json({ received: true });
-          }
+        // Pour status-update, ignorer ceux qui ne sont pas "in-progress" ou au début
+        if (
+          message.type === "status-update" &&
+          message.status !== "in-progress" &&
+          message.status !== "queued"
+        ) {
+          return NextResponse.json({ received: true });
         }
 
-        console.log("Call started:", message.call?.id, "— type:", message.type);
+        // Sans vapi_call_id on ne peut pas dédupliquer : ne rien insérer
+        // (l'unicité de calls.vapi_call_id ignore les NULL).
+        if (!message.call?.id) {
+          console.error("❌ VAPI_CALL_ID MANQUANT - Appel non enregistré");
+          return NextResponse.json({ received: true, warning: "call id missing" });
+        }
+
+        console.log("Call started:", message.call.id, "— type:", message.type);
 
         // Récupérer le restaurant_id (depuis call metadata OU assistant metadata)
         const restaurantId =
@@ -248,20 +249,24 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ received: true, warning: "restaurant_id missing" });
         }
 
-        // Créer l'enregistrement de l'appel
-        // @ts-ignore - Type issue with Supabase generated types
-        const { error } = await getSupabaseAdmin().from("calls").insert({
-          vapi_call_id: message.call?.id,
-          restaurant_id: restaurantId,
-          phone_number: message.call?.customer?.number || null,
-          status: "in_progress",
-          vapi_metadata: message.call || {},
-        });
+        // Upsert idempotent sur la contrainte UNIQUE(vapi_call_id) : un retry
+        // webhook ou des événements concurrents (call-started + status-update)
+        // ne créent plus de ligne dupliquée, sans check-then-insert racé.
+        const { error } = await getSupabaseAdmin().from("calls").upsert(
+          {
+            vapi_call_id: message.call.id,
+            restaurant_id: restaurantId,
+            phone_number: message.call?.customer?.number || null,
+            status: "in_progress",
+            vapi_metadata: message.call || {},
+          },
+          { onConflict: "vapi_call_id", ignoreDuplicates: true }
+        );
 
         if (error) {
           console.error("❌ Error creating call record:", error);
         } else {
-          console.log("✅ Call record created successfully");
+          console.log("✅ Call record upserted successfully");
         }
 
         return NextResponse.json({ received: true });

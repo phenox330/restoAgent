@@ -22,6 +22,8 @@ let mockSupabaseConfig = {
   restaurant: mockRestaurant as any,
   reservation: { ...mockReservation, cancellation_token: "test-token" } as any,
   reservations: [] as any[],
+  // Trace des upserts (idempotence des lignes calls)
+  upsertCalls: [] as { table: string; row: any; opts: any }[],
 };
 
 vi.mock("@supabase/supabase-js", () => ({
@@ -39,23 +41,28 @@ vi.mock("@supabase/supabase-js", () => ({
         update: vi.fn(() => ({
           eq: vi.fn().mockResolvedValue({ data: null, error: null }),
         })),
+        upsert: vi.fn((row: any, opts: any) => {
+          mockSupabaseConfig.upsertCalls.push({ table, row, opts });
+          return Promise.resolve({ data: null, error: null });
+        }),
         eq: vi.fn(() => chainable),
         in: vi.fn(() => chainable),
         single: vi.fn().mockImplementation(() => {
           if (table === "restaurants") {
-            return Promise.resolve({ 
-              data: mockSupabaseConfig.restaurant, 
-              error: null 
+            return Promise.resolve({
+              data: mockSupabaseConfig.restaurant,
+              error: null
             });
           }
           if (table === "calls") {
             return Promise.resolve({ data: null, error: null });
           }
-          return Promise.resolve({ 
-            data: null, 
+          return Promise.resolve({
+            data: null,
             error: { code: "PGRST116" }
           });
         }),
+        maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
       };
 
       if (table === "reservations") {
@@ -70,7 +77,22 @@ vi.mock("@supabase/supabase-js", () => ({
 
       return chainable;
     },
-    rpc: vi.fn().mockResolvedValue({ data: null, error: { code: "PGRST116" } }),
+    rpc: vi.fn().mockImplementation((fnName: string) => {
+      if (fnName === "create_reservation_atomic") {
+        return Promise.resolve({
+          data: [
+            {
+              reservation_id: mockSupabaseConfig.reservation.id,
+              reservation_cancellation_token:
+                mockSupabaseConfig.reservation.cancellation_token,
+              was_created: true,
+            },
+          ],
+          error: null,
+        });
+      }
+      return Promise.resolve({ data: null, error: { code: "PGRST116" } });
+    }),
   })),
 }));
 
@@ -103,6 +125,7 @@ describe("Vapi Webhook Integration", () => {
       restaurant: mockRestaurant,
       reservation: { ...mockReservation, cancellation_token: "test-token" },
       reservations: [],
+      upsertCalls: [],
     };
   });
 
@@ -242,6 +265,47 @@ describe("Vapi Webhook Integration", () => {
       expect(response.status).toBe(200);
       const data = await response.json();
       expect(data.received).toBe(true);
+    });
+
+    it("should record call rows idempotently on webhook retry (upsert onConflict vapi_call_id)", async () => {
+      // Un même événement rejoué (retry Vapi) ne doit jamais produire une 2e
+      // ligne calls : l'écriture passe par un upsert DO NOTHING appuyé sur la
+      // contrainte UNIQUE(vapi_call_id), pas par un check-then-insert racé.
+      const first = await POST(createMockRequest(callStartedPayload));
+      const retry = await POST(createMockRequest(callStartedPayload));
+
+      expect(first.status).toBe(200);
+      expect(retry.status).toBe(200);
+
+      const callUpserts = mockSupabaseConfig.upsertCalls.filter(
+        (u) => u.table === "calls"
+      );
+      expect(callUpserts).toHaveLength(2);
+      for (const u of callUpserts) {
+        expect(u.row.vapi_call_id).toBe(TEST_CALL_ID);
+        expect(u.opts).toMatchObject({
+          onConflict: "vapi_call_id",
+          ignoreDuplicates: true,
+        });
+      }
+    });
+
+    it("should not insert a call row when vapi call id is missing", async () => {
+      const payload = {
+        message: {
+          type: "status-update",
+          status: "in-progress",
+          call: { customer: { number: "+33612345678" } }, // pas d'id
+          assistant: { metadata: { restaurant_id: TEST_RESTAURANT_ID } },
+        },
+      };
+
+      const response = await POST(createMockRequest(payload));
+
+      expect(response.status).toBe(200);
+      const data = await response.json();
+      expect(data.warning).toBe("call id missing");
+      expect(mockSupabaseConfig.upsertCalls).toHaveLength(0);
     });
 
     it("should handle end-of-call-report", async () => {
