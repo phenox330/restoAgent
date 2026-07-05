@@ -43,6 +43,9 @@ export function RestaurantForm({ restaurant }: RestaurantFormProps) {
     (restaurant?.opening_hours as OpeningHours) || {}
   );
   const [smsEnabled, setSmsEnabled] = useState(restaurant?.sms_enabled ?? true);
+  // Le formulaire d'horaires ne sauvegarde pas seul : on signale les changements
+  // non enregistrés pour que l'utilisateur pense à cliquer sur « Mettre à jour ».
+  const [hasUnsavedHours, setHasUnsavedHours] = useState(false);
 
   const isNewRestaurant = !restaurant;
 
@@ -80,6 +83,7 @@ export function RestaurantForm({ restaurant }: RestaurantFormProps) {
     } else {
       setLoading(false);
       setShowSuccess(true);
+      setHasUnsavedHours(false);
     }
   }
 
@@ -103,6 +107,11 @@ export function RestaurantForm({ restaurant }: RestaurantFormProps) {
               <p className="text-sm text-muted-foreground">
                 {restaurant ? "Modifiez les informations ci-dessous" : "Remplissez les informations pour créer votre restaurant"}
               </p>
+              {hasUnsavedHours && (
+                <p className="mt-1 text-sm font-medium text-amber-600">
+                  Modifications non enregistrées — cliquez sur « Mettre à jour »
+                </p>
+              )}
             </div>
             <Button
               type="submit"
@@ -417,7 +426,10 @@ export function RestaurantForm({ restaurant }: RestaurantFormProps) {
 
           <OpeningHoursForm
             value={openingHours}
-            onChange={setOpeningHours}
+            onChange={(hours) => {
+              setOpeningHours(hours);
+              setHasUnsavedHours(true);
+            }}
             disabled={loading}
           />
         </section>

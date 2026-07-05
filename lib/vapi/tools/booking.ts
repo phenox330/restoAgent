@@ -17,6 +17,13 @@ const LARGE_GROUP_THRESHOLD = 8;
 // Seuil de confiance pour validation manuelle
 const CONFIDENCE_THRESHOLD = 0.7;
 
+// Garantit une ponctuation finale, pour enchaîner proprement les phrases vocales
+// ("...fermé ce jour-là." + " Je peux également...").
+function endSentence(text: string): string {
+  const t = text.trim();
+  return /[.!?]$/.test(t) ? t : `${t}.`;
+}
+
 /**
  * Calcule le score de confiance basé sur la qualité des données
  */
@@ -88,7 +95,7 @@ export async function handleCheckAvailability(args: CheckAvailabilityArgs) {
     };
   } else {
     // Si pas disponible, proposer des alternatives
-    let message = result.reason;
+    let message = endSentence(result.reason ?? "Ce créneau n'est pas disponible");
 
     if (result.alternatives && result.alternatives.length > 0) {
       const alternativesMessage = await formatAlternativesMessage(
@@ -238,7 +245,10 @@ export async function handleCreateReservation(args: CreateReservationArgs) {
       console.log("❌ Not available:", availability.reason);
 
       // Proposer la waitlist si complet
-      let message = `Désolé, ${availability.reason}`;
+      const reason = availability.reason ?? "ce créneau n'est pas disponible";
+      let message = `Désolé, ${endSentence(
+        reason.charAt(0).toLowerCase() + reason.slice(1)
+      )}`;
 
       if (availability.alternatives && availability.alternatives.length > 0) {
         const alternativesMessage = await formatAlternativesMessage(
@@ -419,17 +429,18 @@ export async function handleCreateReservation(args: CreateReservationArgs) {
       console.log("⚠️ SMS enabled but no phone number available - skipping SMS");
     }
 
-    // Format de date en français pour le message
+    // Format de date en français pour le message vocal : "vendredi 10 juillet"
+    // plutôt que la date ISO "2026-07-10" (imprononçable naturellement).
     const dateObj = new Date(args.date);
-    const jourNom = JOURS_FR.FULL[dateObj.getDay()];
+    const dateFr = `${JOURS_FR.FULL[dateObj.getDay()]} ${dateObj.getDate()} ${MOIS_FR.FULL[dateObj.getMonth()]}`;
     const partySize = `${args.number_of_guests} ${args.number_of_guests === 1 ? "personne" : "personnes"}`;
 
     // La ligne a été enregistrée en `pending` quand needsConfirmation est vrai :
     // ne pas annoncer "confirmée", sinon le client croit sa table réservée alors
     // qu'elle nécessite une validation manuelle du restaurant.
     let confirmationMessage = needsConfirmation
-      ? `J'enregistre votre demande de réservation pour ${partySize} le ${jourNom} ${args.date} à ${args.time}. Le restaurant vous confirmera dans les meilleurs délais.`
-      : `Parfait ! Votre réservation est confirmée pour ${partySize} le ${jourNom} ${args.date} à ${args.time}.`;
+      ? `J'enregistre votre demande de réservation pour ${partySize} le ${dateFr} à ${args.time}. Le restaurant vous confirmera dans les meilleurs délais.`
+      : `Parfait ! Votre réservation est confirmée pour ${partySize} le ${dateFr} à ${args.time}.`;
 
     if (!needsConfirmation && restaurant?.sms_enabled && args.customer_phone) {
       confirmationMessage +=
