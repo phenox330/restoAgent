@@ -99,6 +99,7 @@ export function notifyError(message: string) {
 function getStatusLabel(status: Reservation["status"]): string {
   const labels: Record<Reservation["status"], string> = {
     pending: "En attente",
+    pending_request: "Demande à traiter",
     confirmed: "Confirmée",
     completed: "Terminée",
     cancelled: "Annulée",

@@ -6,8 +6,9 @@ export type Json =
   | { [key: string]: Json | undefined }
   | Json[]
 
-export type ReservationStatus = 'pending' | 'confirmed' | 'completed' | 'cancelled' | 'no_show'
+export type ReservationStatus = 'pending' | 'confirmed' | 'completed' | 'cancelled' | 'no_show' | 'pending_request'
 export type ReservationSource = 'phone' | 'web' | 'manual'
+export type ReservationRequestType = 'reservation' | 'technical_error' | 'complex_request'
 export type CallStatus = 'in_progress' | 'completed' | 'failed'
 export type WaitlistStatus = 'waiting' | 'needs_manager_call' | 'contacted' | 'converted' | 'expired' | 'cancelled'
 
@@ -90,6 +91,7 @@ export interface Database {
           duration: number
           status: ReservationStatus
           source: ReservationSource
+          request_type: ReservationRequestType
           special_requests: string | null
           internal_notes: string | null
           call_id: string | null
@@ -107,12 +109,13 @@ export interface Database {
           customer_name: string
           customer_phone: string
           customer_email?: string | null
-          reservation_date: string
-          reservation_time: string
+          reservation_date?: string
+          reservation_time?: string
           number_of_guests: number
           duration?: number
           status?: ReservationStatus
           source?: ReservationSource
+          request_type?: ReservationRequestType
           special_requests?: string | null
           internal_notes?: string | null
           call_id?: string | null
@@ -136,6 +139,7 @@ export interface Database {
           duration?: number
           status?: ReservationStatus
           source?: ReservationSource
+          request_type?: ReservationRequestType
           special_requests?: string | null
           internal_notes?: string | null
           call_id?: string | null
