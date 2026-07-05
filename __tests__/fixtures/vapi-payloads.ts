@@ -41,6 +41,34 @@ export const createToolCallsPayload = (
 });
 
 /**
+ * Payload tool-calls avec PLUSIEURS tool calls dans un même message.
+ * Vapi peut en envoyer plusieurs d'un coup ; le webhook doit répondre à chacun.
+ */
+export const createMultiToolCallsPayload = (
+  calls: { id: string; name: string; args: Record<string, any> }[]
+) => ({
+  message: {
+    type: "tool-calls",
+    toolCalls: calls.map((c) => ({
+      id: c.id,
+      function: {
+        name: c.name,
+        arguments: JSON.stringify(c.args),
+      },
+    })),
+    call: {
+      id: TEST_CALL_ID,
+      metadata: {},
+    },
+    assistant: {
+      metadata: {
+        restaurant_id: TEST_RESTAURANT_ID,
+      },
+    },
+  },
+});
+
+/**
  * Payload function-call format (ancien format Vapi)
  */
 export const createFunctionCallPayload = (
