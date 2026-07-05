@@ -36,21 +36,35 @@ vi.mock("@supabase/supabase-js", () => ({
         update: vi.fn(() => ({
           eq: vi.fn().mockResolvedValue({ data: null, error: null }),
         })),
+        upsert: vi.fn().mockResolvedValue({ data: null, error: null }),
         eq: vi.fn(() => chainable),
         in: vi.fn(() => chainable),
         single: vi.fn().mockImplementation(() => {
           if (table === "restaurants") {
-            return Promise.resolve({ 
-              data: mockSupabaseConfig.restaurant, 
-              error: null 
+            return Promise.resolve({
+              data: mockSupabaseConfig.restaurant,
+              error: null
             });
           }
           if (table === "calls") {
             return Promise.resolve({ data: null, error: null });
           }
-          return Promise.resolve({ 
-            data: mockSupabaseConfig.hasDuplicate ? mockSupabaseConfig.reservation : null, 
+          return Promise.resolve({
+            data: mockSupabaseConfig.hasDuplicate ? mockSupabaseConfig.reservation : null,
             error: mockSupabaseConfig.hasDuplicate ? null : { code: "PGRST116" }
+          });
+        }),
+        maybeSingle: vi.fn().mockImplementation(() => {
+          if (table === "restaurants") {
+            return Promise.resolve({ data: null, error: null });
+          }
+          if (table === "calls") {
+            return Promise.resolve({ data: null, error: null });
+          }
+          // reservations — duplicate check (0 ligne = pas une erreur)
+          return Promise.resolve({
+            data: mockSupabaseConfig.hasDuplicate ? mockSupabaseConfig.reservation : null,
+            error: null,
           });
         }),
       };
@@ -67,7 +81,22 @@ vi.mock("@supabase/supabase-js", () => ({
 
       return chainable;
     },
-    rpc: vi.fn().mockResolvedValue({ data: null, error: { code: "PGRST116" } }),
+    rpc: vi.fn().mockImplementation((fnName: string) => {
+      if (fnName === "create_reservation_atomic") {
+        return Promise.resolve({
+          data: [
+            {
+              reservation_id: mockSupabaseConfig.reservation.id,
+              reservation_cancellation_token:
+                mockSupabaseConfig.reservation.cancellation_token,
+              was_created: true,
+            },
+          ],
+          error: null,
+        });
+      }
+      return Promise.resolve({ data: null, error: { code: "PGRST116" } });
+    }),
   })),
 }));
 

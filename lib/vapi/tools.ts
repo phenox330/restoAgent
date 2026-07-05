@@ -1,4 +1,9 @@
-import { checkAvailability, checkDuplicateReservation, getServiceType } from "./availability";
+import {
+  checkAvailability,
+  checkDuplicateReservation,
+  getServiceType,
+  CAPACITY_BUFFER_RATIO,
+} from "./availability";
 import { addToWaitlist, formatAlternativesMessage } from "./waitlist";
 import { sendConfirmationSMS } from "@/lib/sms/twilio";
 import { JOURS_FR, MOIS_FR, TIMEZONE } from "@/lib/utils/date-fr";
@@ -365,6 +370,11 @@ export async function handleCreateReservation(args: CreateReservationArgs) {
         date: args.date,
       });
 
+      if (duplicateCheck.checkFailed) {
+        // Panne de la garde applicative : on continue, l'index unique DB
+        // (uniq_reservations_active_slot) bloquera un vrai doublon à l'insert.
+        console.error("⚠️ Duplicate check failed, relying on DB unique index");
+      }
 
       if (duplicateCheck.hasDuplicate && duplicateCheck.existingReservation) {
         console.log(
@@ -463,31 +473,16 @@ export async function handleCreateReservation(args: CreateReservationArgs) {
       .single();
 
     // Ne passer call_id que s'il existe dans la table calls
-    const reservationData: any = {
-      restaurant_id: args.restaurant_id,
-      customer_name: args.customer_name,
-      customer_phone: args.customer_phone,
-      customer_email: args.customer_email || null,
-      reservation_date: args.date,
-      reservation_time: args.time,
-      number_of_guests: args.number_of_guests,
-      special_requests: args.special_requests || null,
-      source: "phone",
-      status: needsConfirmation ? "pending" : "confirmed",
-      confidence_score: confidenceScore,
-      needs_confirmation: needsConfirmation,
-    };
-
-    // Vérifier si le call existe avant de l'associer
+    let linkedCallId: string | null = null;
     if (args.call_id) {
       const { data: callExists } = await getSupabaseAdmin()
         .from("calls")
         .select("id")
         .eq("vapi_call_id", args.call_id)
-        .single();
+        .maybeSingle();
 
       if (callExists) {
-        reservationData.call_id = callExists.id;
+        linkedCallId = callExists.id;
         console.log("✅ Call ID linked:", callExists.id);
       } else {
         console.log(
@@ -496,14 +491,72 @@ export async function handleCreateReservation(args: CreateReservationArgs) {
       }
     }
 
-    const { data: reservation, error } = await getSupabaseAdmin()
-      .from("reservations")
-      .insert(reservationData)
-      .select()
-      .single();
+    // Insertion via RPC atomique (migration 00010) : le recompte de capacité
+    // se fait sous verrou dans la transaction d'insertion, ce qui ferme la
+    // course entre le checkAvailability ci-dessus et l'écriture. La clé
+    // d'idempotence (call Vapi + créneau) rend les retries webhook inoffensifs.
+    const idempotencyKey = args.call_id
+      ? `${args.call_id}:${args.date}:${args.time}`
+      : null;
 
+    const { data: rpcRows, error } = await getSupabaseAdmin().rpc(
+      "create_reservation_atomic",
+      {
+        p_restaurant_id: args.restaurant_id,
+        p_customer_name: args.customer_name,
+        p_customer_phone: args.customer_phone!,
+        p_date: args.date,
+        p_time: args.time,
+        p_number_of_guests: args.number_of_guests,
+        p_customer_email: args.customer_email || null,
+        p_special_requests: args.special_requests || null,
+        p_status: needsConfirmation ? "pending" : "confirmed",
+        p_source: "phone",
+        p_confidence_score: confidenceScore,
+        p_needs_confirmation: needsConfirmation,
+        p_call_id: linkedCallId,
+        p_idempotency_key: idempotencyKey,
+        p_capacity_buffer_ratio: CAPACITY_BUFFER_RATIO,
+      }
+    );
 
     if (error) {
+      // Course perdue : un autre appel/résa a rempli le service entre le
+      // check de disponibilité et l'insertion.
+      if (error.message?.includes("CAPACITY_EXCEEDED") || error.code === "P0001") {
+        console.log("❌ Capacity exceeded at insert time (race lost):", error.details);
+
+        let message =
+          "Désolé, ce créneau vient tout juste de se remplir et nous sommes complets pour ce service.";
+        const alternativesMessage = await formatAlternativesMessage(
+          args.restaurant_id,
+          args.date,
+          args.number_of_guests
+        );
+        if (alternativesMessage) {
+          message += ` ${alternativesMessage}`;
+        }
+        message +=
+          " Je peux également vous inscrire sur notre liste d'attente si vous préférez cette date.";
+
+        return {
+          success: false,
+          message,
+          offer_waitlist: true,
+        };
+      }
+
+      // Doublon bloqué par l'index unique (garde applicative contournée ou en panne)
+      if (error.code === "23505") {
+        console.log("❌ Duplicate reservation blocked by DB unique index");
+        return {
+          success: false,
+          has_existing_reservation: true,
+          message:
+            "Vous avez déjà une réservation pour ce créneau. Souhaitez-vous la modifier ?",
+        };
+      }
+
       console.error("❌ Database error:", error);
       return {
         success: false,
@@ -512,10 +565,33 @@ export async function handleCreateReservation(args: CreateReservationArgs) {
       };
     }
 
-    console.log("✅ Reservation created successfully:", reservation.id);
+    const rpcRow = Array.isArray(rpcRows) ? rpcRows[0] : rpcRows;
+    if (!rpcRow) {
+      console.error("❌ create_reservation_atomic returned no row");
+      return {
+        success: false,
+        message:
+          "Désolé, une erreur est survenue lors de la création de la réservation. Veuillez réessayer.",
+      };
+    }
+
+    const reservation = {
+      id: rpcRow.reservation_id,
+      cancellation_token: rpcRow.reservation_cancellation_token,
+    };
+    // was_created=false : retry d'une écriture déjà aboutie (ex. timeout webhook
+    // alors que l'INSERT a fini en arrière-plan). On confirme au client sans
+    // ré-envoyer de SMS.
+    const wasCreated = rpcRow.was_created;
+
+    console.log(
+      wasCreated
+        ? `✅ Reservation created successfully: ${reservation.id}`
+        : `♻️ Reservation replayed idempotently: ${reservation.id}`
+    );
 
     // 6. Envoyer SMS de confirmation si activé
-    if (restaurant?.sms_enabled && args.customer_phone) {
+    if (wasCreated && restaurant?.sms_enabled && args.customer_phone) {
       console.log("📱 Sending confirmation SMS...");
       try {
         await sendConfirmationSMS({

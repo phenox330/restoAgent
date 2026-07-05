@@ -10,7 +10,9 @@ const LUNCH_CUTOFF_HOUR = 15;
 // les walk-ins et les réservations prises hors-système (dérive d'état).
 // Évite que l'agent confirme une table alors que le resto est en réalité plein.
 // (Pourra devenir configurable par restaurant plus tard.)
-const CAPACITY_BUFFER_RATIO = 0.1; // 10 %
+// Exportée pour être passée au RPC create_reservation_atomic : la fonction SQL
+// applique la même règle, la constante ne vit qu'ici.
+export const CAPACITY_BUFFER_RATIO = 0.1; // 10 %
 
 function effectiveCapacity(maxCapacity: number): number {
   return Math.floor(maxCapacity * (1 - CAPACITY_BUFFER_RATIO));
@@ -289,6 +291,11 @@ async function findAlternatives(
 
 /**
  * Vérifie si un doublon existe (même téléphone + même date)
+ *
+ * Garde applicative pour le dialogue "vous avez déjà une table…" ; le rempart
+ * dur est l'index unique DB (uniq_reservations_active_slot, migration 00010).
+ * `checkFailed` distingue une vraie erreur DB de "aucune ligne" : l'appelant
+ * ne doit pas interpréter une panne comme "pas de doublon" en silence.
  */
 export async function checkDuplicateReservation(
   supabase: Supabase,
@@ -299,6 +306,7 @@ export async function checkDuplicateReservation(
   }
 ): Promise<{
   hasDuplicate: boolean;
+  checkFailed?: boolean;
   existingReservation?: {
     id: string;
     customer_name: string;
@@ -306,27 +314,27 @@ export async function checkDuplicateReservation(
     number_of_guests: number;
   };
 }> {
-  try {
-    const { data: existing } = await supabase
-      .from("reservations")
-      .select("id, customer_name, reservation_time, number_of_guests")
-      .eq("restaurant_id", params.restaurantId)
-      .eq("customer_phone", params.customerPhone)
-      .eq("reservation_date", params.date)
-      .in("status", ["pending", "confirmed"])
-      .limit(1)
-      .single();
+  const { data: existing, error } = await supabase
+    .from("reservations")
+    .select("id, customer_name, reservation_time, number_of_guests")
+    .eq("restaurant_id", params.restaurantId)
+    .eq("customer_phone", params.customerPhone)
+    .eq("reservation_date", params.date)
+    .in("status", ["pending", "confirmed"])
+    .limit(1)
+    .maybeSingle();
 
-    if (existing) {
-      return {
-        hasDuplicate: true,
-        existingReservation: existing,
-      };
-    }
-
-    return { hasDuplicate: false };
-  } catch (error) {
-    // Si pas de résultat, ce n'est pas une erreur
-    return { hasDuplicate: false };
+  if (error) {
+    console.error("Error checking duplicate reservation:", error);
+    return { hasDuplicate: false, checkFailed: true };
   }
+
+  if (existing) {
+    return {
+      hasDuplicate: true,
+      existingReservation: existing,
+    };
+  }
+
+  return { hasDuplicate: false };
 }

@@ -23,6 +23,11 @@ let mockConfig = {
   // Lignes renvoyées par un UPDATE ... .select() (ex. annulation scoping tenant).
   // Non vide = une réservation annulable a été trouvée et mise à jour.
   updatedRows: [{ id: "res-123-456-789" }] as any[],
+  // Résultat du RPC create_reservation_atomic. null = succès par défaut
+  // (ligne créée à partir de mockConfig.reservation).
+  rpcCreateResult: null as any,
+  // Trace des appels rpc(name, params) pour vérifier les arguments passés.
+  rpcCalls: [] as { fnName: string; params: any }[],
 };
 
 // Mock Supabase AVANT tout import de tools
@@ -70,9 +75,28 @@ vi.mock("@supabase/supabase-js", () => ({
             });
           }
           // reservations - pour duplicate check
-          return Promise.resolve({ 
-            data: mockConfig.hasDuplicate ? mockConfig.reservation : null, 
+          return Promise.resolve({
+            data: mockConfig.hasDuplicate ? mockConfig.reservation : null,
             error: mockConfig.hasDuplicate ? null : { code: "PGRST116" }
+          });
+        }),
+        maybeSingle: vi.fn().mockImplementation(() => {
+          if (table === "restaurants") {
+            return Promise.resolve({
+              data: mockConfig.restaurant,
+              error: mockConfig.restaurantError,
+            });
+          }
+          if (table === "calls") {
+            return Promise.resolve({
+              data: mockConfig.callExists ? { id: "call-id" } : null,
+              error: null,
+            });
+          }
+          // reservations - duplicate check (maybeSingle : pas d'erreur si 0 ligne)
+          return Promise.resolve({
+            data: mockConfig.hasDuplicate ? mockConfig.reservation : null,
+            error: null,
           });
         }),
       };
@@ -90,7 +114,25 @@ vi.mock("@supabase/supabase-js", () => ({
 
       return chainable;
     },
-    rpc: vi.fn().mockResolvedValue({ data: null, error: { code: "PGRST116" } }),
+    rpc: vi.fn().mockImplementation((fnName: string, params: any) => {
+      mockConfig.rpcCalls.push({ fnName, params });
+      if (fnName === "create_reservation_atomic") {
+        return Promise.resolve(
+          mockConfig.rpcCreateResult ?? {
+            data: [
+              {
+                reservation_id: mockConfig.reservation.id,
+                reservation_cancellation_token:
+                  mockConfig.reservation.cancellation_token,
+                was_created: true,
+              },
+            ],
+            error: null,
+          }
+        );
+      }
+      return Promise.resolve({ data: null, error: { code: "PGRST116" } });
+    }),
   })),
 }));
 
@@ -121,6 +163,8 @@ describe("tools.ts", () => {
       hasDuplicate: false,
       callExists: false,
       updatedRows: [{ id: "res-123-456-789" }],
+      rpcCreateResult: null,
+      rpcCalls: [],
     };
 
     // Mock Twilio fetch response
@@ -322,6 +366,118 @@ describe("tools.ts", () => {
       expect(result.confidence_score).toBeDefined();
       expect(result.confidence_score).toBeGreaterThan(0);
       expect(result.confidence_score).toBeLessThanOrEqual(1);
+    });
+  });
+
+  describe("handleCreateReservation — RPC atomique (migration 00010)", () => {
+    const validArgs = {
+      restaurant_id: TEST_RESTAURANT_ID,
+      customer_name: "Jean Dupont",
+      customer_phone: "+33612345678",
+      date: "2025-01-15",
+      time: "19:30",
+      number_of_guests: 4,
+      force_create: true, // Bypass duplicate check applicatif
+    };
+
+    it("should refuse when DB capacity check fails (race lost after availability check)", async () => {
+      // Le checkAvailability applicatif voit de la place (reservations: []),
+      // mais le recompte sous verrou dans create_reservation_atomic refuse :
+      // c'est exactement la fenêtre TOCTOU que la fonction ferme.
+      setupMockConfig({
+        reservations: [],
+        rpcCreateResult: {
+          data: null,
+          error: { code: "P0001", message: "CAPACITY_EXCEEDED", details: "remaining=2" },
+        },
+      });
+
+      const result = (await handleCreateReservation(validArgs)) as any;
+
+      expect(result.success).toBe(false);
+      expect(result.offer_waitlist).toBe(true);
+      expect(result.message).toContain("complets");
+      expect(result.reservation_id).toBeUndefined();
+    });
+
+    it("should refuse when DB unique index rejects a duplicate", async () => {
+      setupMockConfig({
+        reservations: [],
+        rpcCreateResult: {
+          data: null,
+          error: {
+            code: "23505",
+            message:
+              'duplicate key value violates unique constraint "uniq_reservations_active_slot"',
+          },
+        },
+      });
+
+      const result = (await handleCreateReservation(validArgs)) as any;
+
+      expect(result.success).toBe(false);
+      expect(result.has_existing_reservation).toBe(true);
+      expect(result.message).toContain("déjà une réservation");
+    });
+
+    it("should replay idempotently on webhook retry (was_created=false) without resending SMS", async () => {
+      setupMockConfig({
+        reservations: [],
+        rpcCreateResult: {
+          data: [
+            {
+              reservation_id: "res-replayed-001",
+              reservation_cancellation_token: "test-token-123",
+              was_created: false,
+            },
+          ],
+          error: null,
+        },
+      });
+
+      const result = (await handleCreateReservation({
+        ...validArgs,
+        call_id: "vapi-call-retry-1",
+      })) as any;
+
+      // Le retry est confirmé au client comme un succès…
+      expect(result.success).toBe(true);
+      expect(result.reservation_id).toBe("res-replayed-001");
+
+      // …mais aucun 2e SMS n'est envoyé (le 1er INSERT, abouti en
+      // arrière-plan après le timeout, l'a déjà déclenché).
+      const twilioCall = mockFetch.mock.calls.find((call: any) =>
+        call[0].includes("api.twilio.com")
+      );
+      expect(twilioCall).toBeUndefined();
+    });
+
+    it("should pass idempotency key (call_id + date + time) and capacity buffer to the RPC", async () => {
+      setupMockConfig({ reservations: [] });
+
+      await handleCreateReservation({
+        ...validArgs,
+        call_id: "vapi-call-42",
+      });
+
+      const rpcCall = mockConfig.rpcCalls.find(
+        (c) => c.fnName === "create_reservation_atomic"
+      );
+      expect(rpcCall).toBeDefined();
+      expect(rpcCall!.params.p_idempotency_key).toBe("vapi-call-42:2025-01-15:19:30");
+      expect(rpcCall!.params.p_capacity_buffer_ratio).toBe(0.1);
+      expect(rpcCall!.params.p_number_of_guests).toBe(4);
+    });
+
+    it("should not set an idempotency key without call_id", async () => {
+      setupMockConfig({ reservations: [] });
+
+      await handleCreateReservation(validArgs);
+
+      const rpcCall = mockConfig.rpcCalls.find(
+        (c) => c.fnName === "create_reservation_atomic"
+      );
+      expect(rpcCall!.params.p_idempotency_key).toBeNull();
     });
   });
 
