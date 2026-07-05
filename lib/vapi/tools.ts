@@ -1,21 +1,37 @@
 import {
   checkAvailability,
   checkDuplicateReservation,
-  getServiceType,
   CAPACITY_BUFFER_RATIO,
 } from "./availability";
 import { addToWaitlist, formatAlternativesMessage } from "./waitlist";
+import { handleTransferCall, type TransferReason } from "./transfer";
 import { sendConfirmationSMS } from "@/lib/sms/twilio";
 import { JOURS_FR, MOIS_FR, TIMEZONE } from "@/lib/utils/date-fr";
 import { redactPII, redactName, redactPhone } from "@/lib/logger";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import type { Database } from "@/types/database";
+import type { OpeningHours, DaySchedule } from "@/types";
 
 // Seuil pour groupes nécessitant validation manager
 const LARGE_GROUP_THRESHOLD = 8;
 
 // Seuil de confiance pour validation manuelle
 const CONFIDENCE_THRESHOLD = 0.7;
+
+type ReservationRow = Database["public"]["Tables"]["reservations"]["Row"];
+type ReservationInsert = Database["public"]["Tables"]["reservations"]["Insert"];
+
+// Ligne renvoyée par le RPC fuzzy_search_reservations (colonnes réservation + score)
+interface FuzzyReservationMatch {
+  id: string;
+  customer_name: string;
+  customer_phone: string | null;
+  reservation_date: string;
+  reservation_time: string;
+  number_of_guests: number;
+  status: string;
+  similarity_score: number;
+}
 
 interface CheckAvailabilityArgs {
   restaurant_id: string;
@@ -135,7 +151,7 @@ export async function handleGetRestaurantInfo(args: GetRestaurantInfoArgs) {
     console.log("✅ Restaurant info found:", restaurant.name);
 
     // Formatter les horaires en texte lisible
-    const openingHours = restaurant.opening_hours as any;
+    const openingHours = (restaurant.opening_hours ?? {}) as OpeningHours;
     let hoursText = "";
 
     const daysMap: { [key: string]: string } = {
@@ -151,7 +167,7 @@ export async function handleGetRestaurantInfo(args: GetRestaurantInfoArgs) {
     for (const [day, hours] of Object.entries(openingHours)) {
       const dayName = daysMap[day] || day;
       if (hours && typeof hours === "object") {
-        const dayHours = hours as any;
+        const dayHours: DaySchedule = hours;
         const services = [];
 
         if (dayHours.lunch) {
@@ -805,7 +821,7 @@ export async function handleFindAndCancelReservation(
 
       // Si PLUSIEURS réservations : lister et demander laquelle
       if (reservations.length > 1) {
-        const list = reservations.map((r: any, idx: number) => {
+        const list = reservations.map((r, idx) => {
           const date = new Date(r.reservation_date);
           const dateStr = date.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
           return `${idx + 1}. ${dateStr} à ${r.reservation_time} pour ${r.number_of_guests} personne${r.number_of_guests > 1 ? "s" : ""}`;
@@ -843,7 +859,7 @@ export async function handleFindAndCancelReservation(
 
       // Filtrer les résultats avec un score trop bas (faux positifs)
       const validReservations = reservations?.filter(
-        (r: any) => r.similarity_score >= SIMILARITY_THRESHOLD || args.customer_phone === r.customer_phone
+        (r: FuzzyReservationMatch) => r.similarity_score >= SIMILARITY_THRESHOLD || args.customer_phone === r.customer_phone
       ) || [];
 
       console.log("🔍 Cancel search results:", reservations?.length || 0, "total,", validReservations.length, "valid matches");
@@ -863,13 +879,13 @@ export async function handleFindAndCancelReservation(
       if (validReservations.length > 1) {
         const topScore = validReservations[0].similarity_score;
         const closeMatches = validReservations.filter(
-          (r: any) => Math.abs(r.similarity_score - topScore) < 0.1
+          (r: FuzzyReservationMatch) => Math.abs(r.similarity_score - topScore) < 0.1
         );
 
         if (closeMatches.length > 1 && !args.customer_phone) {
           const matchNames = closeMatches
             .map(
-              (r: any) =>
+              (r: FuzzyReservationMatch) =>
                 `${r.customer_name} (${new Date(r.reservation_date).toLocaleDateString("fr-FR")} à ${r.reservation_time})`
             )
             .join(", ");
@@ -973,7 +989,7 @@ export async function handleFindReservationForCancellation(
   }
 
   try {
-    let reservations: any[] = [];
+    let reservations: ReservationRow[] = [];
 
     // Recherche par téléphone d'abord (si disponible)
     if (args.customer_phone) {
@@ -1060,7 +1076,7 @@ export async function handleFindReservationForCancellation(
 
     // PLUSIEURS réservations - lister pour clarification
     console.log(`⚠️ Found ${reservations.length} reservations`);
-    const list = reservations.map((r: any, idx: number) => {
+    const list = reservations.map((r, idx) => {
       const date = new Date(r.reservation_date);
       const dateStr = date.toLocaleDateString("fr-FR", {
         weekday: "long",
@@ -1077,7 +1093,7 @@ export async function handleFindReservationForCancellation(
       };
     });
 
-    const listStr = list.map((r: any) =>
+    const listStr = list.map((r) =>
       `${r.index}. ${r.customer_name} - ${r.date} à ${r.time} pour ${r.number_of_guests} personne${r.number_of_guests > 1 ? "s" : ""} (ID: ${r.reservation_id})`
     ).join(", ");
 
@@ -1225,7 +1241,7 @@ export async function handleFindAndUpdateReservation(
 
     // Si plusieurs réservations, demander précision
     if (reservations.length > 1) {
-      const list = reservations.map((r: any) => {
+      const list = reservations.map((r) => {
         const date = new Date(r.reservation_date);
         const dateStr = date.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
         return `${dateStr} à ${r.reservation_time} pour ${r.number_of_guests} personne${r.number_of_guests > 1 ? "s" : ""}`;
@@ -1342,125 +1358,6 @@ export async function handleFindAndUpdateReservation(
   }
 }
 
-// Fallback pour la modification classique
-async function fallbackFindAndUpdate(args: FindAndUpdateReservationArgs) {
-  const searchTerms = args.customer_name.trim().split(/\s+/);
-
-  let query = getSupabaseAdmin()
-    .from("reservations")
-    .select("*")
-    .eq("restaurant_id", args.restaurant_id)
-    .in("status", ["pending", "confirmed"])
-    .order("reservation_date", { ascending: true });
-
-  if (searchTerms.length > 0) {
-    const orConditions = searchTerms
-      .map((term) => `customer_name.ilike.%${term}%`)
-      .join(",");
-    query = query.or(orConditions);
-  }
-
-  if (args.customer_phone) {
-    query = query.eq("customer_phone", args.customer_phone);
-  }
-
-  const { data: reservations, error } = await query;
-
-  if (error || !reservations || reservations.length === 0) {
-    return {
-      success: false,
-      reservation_found: false,
-      message: `Je ne trouve pas de réservation au nom de ${args.customer_name}. Souhaitez-vous créer une nouvelle réservation ?`,
-    };
-  }
-
-  const reservation = reservations[0];
-
-  // Format current date for display
-  const currentDateObj = new Date(reservation.reservation_date);
-  const currentDateStr = currentDateObj.toLocaleDateString("fr-FR", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-  });
-
-  // If no modification params provided, return current reservation details
-  const hasModifications = args.new_date || args.new_time || args.new_number_of_guests;
-
-  if (!hasModifications) {
-    return {
-      success: true,
-      reservation_found: true,
-      reservation_id: reservation.id,
-      current_details: {
-        date: reservation.reservation_date,
-        time: reservation.reservation_time,
-        number_of_guests: reservation.number_of_guests,
-        customer_name: reservation.customer_name,
-      },
-      message: `J'ai votre réservation pour ${reservation.number_of_guests} personne${reservation.number_of_guests > 1 ? "s" : ""} le ${currentDateStr} à ${reservation.reservation_time}. Que souhaitez-vous modifier ?`,
-    };
-  }
-
-  const newDate = args.new_date || reservation.reservation_date;
-  const newTime = args.new_time || reservation.reservation_time;
-  const newGuests = args.new_number_of_guests || reservation.number_of_guests;
-
-  // Always check availability for modifications
-  const availabilityResult = await checkAvailability(getSupabaseAdmin(), {
-    restaurantId: args.restaurant_id,
-    date: newDate,
-    time: newTime,
-    numberOfGuests: newGuests,
-  });
-
-  if (!availabilityResult.available) {
-    return {
-      success: false,
-      slot_unavailable: true,
-      message: `Ce créneau est complet. Quel autre horaire souhaiteriez-vous ?`,
-    };
-  }
-
-  const { data: updateData, error: updateError } = await getSupabaseAdmin()
-    .from("reservations")
-    .update({
-      reservation_date: newDate,
-      reservation_time: newTime,
-      number_of_guests: newGuests,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", reservation.id)
-    .eq("status", reservation.status) // Optimistic locking
-    .select();
-
-  if (updateError) {
-    return {
-      success: false,
-      message: `Erreur lors de la modification. Veuillez réessayer.`,
-    };
-  }
-
-  if (!updateData || updateData.length === 0) {
-    return {
-      success: false,
-      message: `La réservation a été modifiée par quelqu'un d'autre. Veuillez réessayer.`,
-    };
-  }
-
-  const newDateStr = new Date(newDate).toLocaleDateString("fr-FR", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-  });
-
-  return {
-    success: true,
-    updated: true,
-    message: `Votre réservation est modifiée pour ${newGuests} personne${newGuests > 1 ? "s" : ""} le ${newDateStr} à ${newTime}.`,
-  };
-}
-
 // Tool 6: Ajouter à la liste d'attente
 interface AddToWaitlistArgs {
   restaurant_id: string;
@@ -1493,8 +1390,6 @@ export async function handleAddToWaitlist(args: AddToWaitlistArgs) {
 }
 
 // Tool 7: Transférer l'appel vers un humain
-import { handleTransferCall, type TransferReason } from "./transfer";
-
 interface TransferCallArgs {
   restaurant_id: string;
   reason: TransferReason;
@@ -1541,13 +1436,13 @@ export async function handleCreateTechnicalErrorRequest(
     }
 
     // Préparer les données de base
-    const errorRequestData: any = {
+    const errorRequestData: ReservationInsert = {
       restaurant_id: args.restaurant_id,
       customer_name: args.customer_name.trim(),
       customer_phone: args.customer_phone.trim(),
       customer_email: null,
-      reservation_date: null, // NULL - détails dans internal_notes
-      reservation_time: null, // NULL - détails dans internal_notes
+      // reservation_date / reservation_time omis volontairement : la colonne est
+      // nullable sans défaut, donc NULL est stocké (détails dans internal_notes).
       number_of_guests: 1, // Valeur par défaut (contrainte DB > 0)
       duration: 90,
       status: "pending_request",
@@ -1620,30 +1515,34 @@ export async function handleCreateTechnicalErrorRequest(
 }
 
 // Router pour gérer les appels de fonctions
-export async function handleToolCall(toolName: string, args: any) {
+export async function handleToolCall(toolName: string, args: unknown) {
   switch (toolName) {
     case "get_restaurant_info":
-      return handleGetRestaurantInfo(args);
+      return handleGetRestaurantInfo(args as GetRestaurantInfoArgs);
     case "get_current_date":
       return handleGetCurrentDate();
     case "check_availability":
-      return handleCheckAvailability(args);
+      return handleCheckAvailability(args as CheckAvailabilityArgs);
     case "create_reservation":
-      return handleCreateReservation(args);
+      return handleCreateReservation(args as CreateReservationArgs);
     case "cancel_reservation":
-      return handleCancelReservation(args);
+      return handleCancelReservation(args as CancelReservationArgs);
     case "find_and_cancel_reservation":
-      return handleFindAndCancelReservation(args);
+      return handleFindAndCancelReservation(args as FindAndCancelReservationArgs);
     case "find_reservation_for_cancellation":
-      return handleFindReservationForCancellation(args);
+      return handleFindReservationForCancellation(
+        args as FindReservationForCancellationArgs
+      );
     case "find_and_update_reservation":
-      return handleFindAndUpdateReservation(args);
+      return handleFindAndUpdateReservation(args as FindAndUpdateReservationArgs);
     case "add_to_waitlist":
-      return handleAddToWaitlist(args);
+      return handleAddToWaitlist(args as AddToWaitlistArgs);
     case "transfer_call":
-      return handleTransfer(args);
+      return handleTransfer(args as TransferCallArgs);
     case "create_technical_error_request":
-      return handleCreateTechnicalErrorRequest(args);
+      return handleCreateTechnicalErrorRequest(
+        args as CreateTechnicalErrorRequestArgs
+      );
     default:
       return {
         success: false,

@@ -9,6 +9,7 @@ const statusConfig: Record<
   { label: string; variant: "default" | "secondary" | "destructive" | "outline" }
 > = {
   pending: { label: "En attente", variant: "secondary" },
+  pending_request: { label: "Demande à traiter", variant: "secondary" },
   confirmed: { label: "Confirmée", variant: "default" },
   completed: { label: "Terminée", variant: "outline" },
   cancelled: { label: "Annulée", variant: "destructive" },
