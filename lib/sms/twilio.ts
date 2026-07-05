@@ -5,6 +5,7 @@
 
 import { formatDateFr } from "@/lib/utils/date-fr";
 import { formatPhoneE164 } from "@/lib/utils/phone";
+import { redactPhone } from "@/lib/logger";
 
 interface SMSConfirmationParams {
   phone: string;
@@ -64,8 +65,9 @@ export async function sendConfirmationSMS(
       `${params.guests} pers.\n` +
       `Annuler: ${cancellationLink}`;
 
-    console.log("📱 Sending SMS to:", toNumber);
-    console.log("📱 Message:", message);
+    console.log("📱 Sending SMS to:", redactPhone(toNumber));
+    // Ne pas logger le corps du message : il contient le nom du client et le
+    // lien d'annulation (token). Seule la longueur est utile au debug.
     console.log("📱 Message length:", message.length);
 
     // Utiliser l'API Twilio REST directement (sans dépendance npm)

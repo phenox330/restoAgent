@@ -5,6 +5,8 @@
  * Will be extended in Story 1.10 with database persistence.
  */
 
+import { redactPII } from "@/lib/logger";
+
 export interface ErrorLogEntry {
   timestamp: string;
   error_type: string;
@@ -12,28 +14,9 @@ export interface ErrorLogEntry {
   stack_trace?: string;
   call_id?: string;
   function_name?: string;
-  parameters?: Record<string, any>;
+  parameters?: Record<string, unknown>;
   restaurant_id?: string;
-  context?: Record<string, any>;
-}
-
-// Champs susceptibles de contenir des données personnelles (RGPD) — rédigés dans les logs.
-const PII_KEYS = new Set([
-  "customer_name",
-  "customer_phone",
-  "customer_email",
-  "name",
-  "phone",
-  "email",
-]);
-
-function redactPII(obj?: Record<string, any>): Record<string, any> | undefined {
-  if (!obj) return obj;
-  return Object.fromEntries(
-    Object.entries(obj).map(([key, value]) =>
-      PII_KEYS.has(key) && value != null ? [key, "[REDACTED]"] : [key, value]
-    )
-  );
+  context?: Record<string, unknown>;
 }
 
 /**
