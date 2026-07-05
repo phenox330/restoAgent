@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 import {
@@ -14,7 +13,6 @@ import {
 import { Card, CardContent } from "@/components/ui/card";
 import { ReservationStatusBadge, ConfidenceScoreBadge } from "./reservation-status-badge";
 import { ReservationActions } from "./reservation-actions";
-import { ReservationDetailsDialog } from "./reservation-details-dialog";
 import type { Reservation } from "@/types";
 import { AlertCircle, MessageSquare } from "lucide-react";
 
@@ -29,14 +27,6 @@ export function ReservationsTable({
   showConfidenceScore = false,
   newReservationIds,
 }: ReservationsTableProps) {
-  const [selectedReservation, setSelectedReservation] = useState<Reservation | null>(null);
-  const [detailsOpen, setDetailsOpen] = useState(false);
-
-  const handleRowClick = (reservation: Reservation) => {
-    setSelectedReservation(reservation);
-    setDetailsOpen(true);
-  };
-
   if (reservations.length === 0) {
     return (
       <Card>
@@ -91,7 +81,6 @@ export function ReservationsTable({
                         key={reservation.id}
                         reservation={reservation}
                         showConfidenceScore={true}
-                        onRowClick={handleRowClick}
                         isNew={newReservationIds?.has(reservation.id)}
                       />
                     ))}
@@ -128,7 +117,6 @@ export function ReservationsTable({
                       key={reservation.id}
                       reservation={reservation}
                       showConfidenceScore={showConfidenceScore}
-                      onRowClick={handleRowClick}
                       isNew={newReservationIds?.has(reservation.id)}
                     />
                   ))}
@@ -138,13 +126,6 @@ export function ReservationsTable({
           </CardContent>
         </Card>
       </div>
-
-      {/* Dialog des détails */}
-      <ReservationDetailsDialog
-        reservation={selectedReservation}
-        open={detailsOpen}
-        onOpenChange={setDetailsOpen}
-      />
     </>
   );
 }
@@ -152,30 +133,20 @@ export function ReservationsTable({
 interface ReservationRowProps {
   reservation: Reservation;
   showConfidenceScore?: boolean;
-  onRowClick: (reservation: Reservation) => void;
   isNew?: boolean;
 }
 
 function ReservationRow({
   reservation,
   showConfidenceScore = false,
-  onRowClick,
   isNew = false,
 }: ReservationRowProps) {
   const date = new Date(reservation.reservation_date);
   const formattedDate = format(date, "EEE dd MMM yyyy", { locale: fr });
 
-  const handleCellClick = (e: React.MouseEvent) => {
-    // Ne pas ouvrir le dialog si on clique sur la cellule des actions
-    const target = e.target as HTMLElement;
-    if (target.closest('[data-actions-cell]')) return;
-    onRowClick(reservation);
-  };
-
   return (
     <TableRow
-      className={`cursor-pointer hover:bg-muted/50 ${isNew ? "new-reservation" : ""}`}
-      onClick={handleCellClick}
+      className={`hover:bg-muted/50 ${isNew ? "new-reservation" : ""}`}
     >
       <TableCell className="font-medium">{formattedDate}</TableCell>
       <TableCell>{reservation.reservation_time}</TableCell>
@@ -218,7 +189,7 @@ function ReservationRow({
         {reservation.source === "web" && "Web"}
         {reservation.source === "manual" && "Manuel"}
       </TableCell>
-      <TableCell className="text-right" data-actions-cell>
+      <TableCell className="text-right">
         <ReservationActions reservation={reservation} />
       </TableCell>
     </TableRow>
